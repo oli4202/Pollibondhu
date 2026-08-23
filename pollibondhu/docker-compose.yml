@@ -1,0 +1,49 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: pollibondhu-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: polli
+      POSTGRES_PASSWORD: bondhu123
+      POSTGRES_DB: pollibondhu
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    container_name: pollibondhu-api
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      DATABASE_URL: postgresql://polli:bondhu123@postgres:5432/pollibondhu?schema=public
+      JWT_SECRET: pollibondhu-super-secret-key-2026
+      JWT_REFRESH_SECRET: pollibondhu-refresh-secret-2026
+      PORT: 4000
+      NODE_ENV: development
+    depends_on:
+      - postgres
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+
+  frontend:
+    build: ./frontend
+    container_name: pollibondhu-web
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_PROXY_TARGET: http://backend:4000
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+volumes:
+  pgdata:

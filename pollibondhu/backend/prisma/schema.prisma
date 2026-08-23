@@ -1,0 +1,439 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// CORE ENTITIES FROM ERD
+// ============================================
+
+model User {
+  user_id       Int      @id @default(autoincrement())
+  email         String   @unique
+  password_hash String
+  phone         String?  @unique
+  nid           String?  @unique
+  full_name     String
+  avatar_url    String?
+  district      String?
+  division      String?
+  upazila       String?
+  role          String   @default("USER")
+  is_active     Boolean  @default(true)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  // RBAC & Assignments
+  department_id Int?
+  assigned_area String? // JSON or comma-separated location hierarchy
+  department    Department? @relation(fields: [department_id], references: [department_id])
+
+  // User relationships per ERD
+  certificates    Certificate[]
+  votes           Vote[]
+  complaints      Complaint[]
+  forum_posts     ForumPost[]
+  user_activities UserActivity[]
+  expert_bookings ExpertBooking[]
+  saved_services  SavedService[]
+  expert          Expert?
+  updated_weather Weather[]
+  notifications   Notification[]
+  refresh_tokens  RefreshToken[]
+
+  // Provider-specific (when role = PROVIDER)
+  services Service[]
+
+  // Admin audit trail
+  audit_logs            AuditLog[]
+  reviewed_complaints   Complaint[]   @relation("ComplaintReviewer")
+  approved_certificates Certificate[] @relation("CertificateApprover")
+
+  // Smart Village Additions
+  assigned_complaints Complaint[] @relation("ComplaintAssignee")
+  assigned_projects   Project[]   @relation("ProjectOfficer")
+  sent_messages       Message[]   @relation("MessageSender")
+  received_messages   Message[]   @relation("MessageReceiver")
+
+  @@map("users")
+}
+
+model Crop {
+  crop_id     Int      @id @default(autoincrement())
+  name        String
+  name_bn     String?
+  season      String?
+  category_id Int?
+  image_url   String?
+  description String?
+  created_at  DateTime @default(now())
+
+  // ERD: CROP has MARKET_PRICE, influences CROP_ADVICE
+  market_prices MarketPrice[]
+  crop_advices  CropAdvice[]
+  category      Category?     @relation(fields: [category_id], references: [category_id])
+
+  @@map("crops")
+}
+
+model Service {
+  service_id   Int      @id @default(autoincrement())
+  provider_id  Int
+  category_id  Int?
+  title        String
+  description  String?
+  price        Decimal?
+  location     String?
+  district     String?
+  status       String   @default("PENDING")
+  is_available Boolean  @default(true)
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  // ERD: SERVICE has SAVED_SERVICE (includes)
+  saved_by SavedService[]
+  provider User           @relation(fields: [provider_id], references: [user_id])
+  category Category?      @relation(fields: [category_id], references: [category_id])
+
+  @@map("services")
+}
+
+model Expert {
+  expert_id      Int      @id @default(autoincrement())
+  user_id        Int      @unique
+  specialization String
+  bio            String?
+  rating         Decimal  @default(0.0)
+  is_verified    Boolean  @default(false)
+  created_at     DateTime @default(now())
+
+  // ERD: EXPERT has EXPERT_BOOKING, writes CROP_ADVICE
+  bookings     ExpertBooking[]
+  crop_advices CropAdvice[]
+  user         User            @relation(fields: [user_id], references: [user_id])
+
+  @@map("experts")
+}
+
+model Weather {
+  weather_id    Int      @id @default(autoincrement())
+  district      String
+  temperature   Float?
+  condition     String?
+  humidity      Int?
+  rainfall      Float?
+  uv_index      String?
+  forecast_date DateTime @default(now())
+  updated_by    Int?
+  created_at    DateTime @default(now())
+
+  // ERD: WEATHER publishes CROP_ADVICE, influences CROP
+  crop_advices     CropAdvice[]
+  updated_by_admin User?        @relation(fields: [updated_by], references: [user_id])
+
+  @@map("weather_data")
+}
+
+// ============================================
+// USER ACTION ENTITIES FROM ERD
+// ============================================
+
+model Certificate {
+  cert_id      Int       @id @default(autoincrement())
+  user_id      Int
+  cert_type    String
+  status       String    @default("PENDING")
+  applied_at   DateTime  @default(now())
+  approved_at  DateTime?
+  approved_by  Int?
+  document_url String?
+  notes        String?
+
+  // ERD: CERTIFICATE approved by ADMIN, applied by USER
+  user     User  @relation(fields: [user_id], references: [user_id])
+  approver User? @relation("CertificateApprover", fields: [approved_by], references: [user_id])
+
+  @@map("certificates")
+}
+
+model Vote {
+  vote_id  Int      @id @default(autoincrement())
+  user_id  Int
+  poll_id  Int
+  choice   String
+  voted_at DateTime @default(now())
+
+  // ERD: USER casts VOTE
+  user User @relation(fields: [user_id], references: [user_id])
+  poll Poll @relation(fields: [poll_id], references: [poll_id])
+
+  @@unique([user_id, poll_id])
+  @@map("votes")
+}
+
+model Complaint {
+  complaint_id     Int       @id @default(autoincrement())
+  user_id          Int
+  category         String
+  location         String?
+  subject          String
+  description      String
+  photo_url        String?
+  status           String    @default("PENDING") // PENDING, REVIEW, ASSIGNED, IN_PROGRESS, RESOLVED, CLOSED
+  priority         String    @default("MEDIUM")
+  submitted_at     DateTime  @default(now())
+  reviewed_by      Int?
+  department_id    Int?
+  assigned_to      Int?
+  deadline         DateTime?
+  resolution_notes String?
+  resolved_at      DateTime?
+  citizen_feedback String?
+
+  // ERD: USER submits COMPLAINT, ADMIN reviews
+  user       User        @relation(fields: [user_id], references: [user_id])
+  reviewer   User?       @relation("ComplaintReviewer", fields: [reviewed_by], references: [user_id])
+  assignee   User?       @relation("ComplaintAssignee", fields: [assigned_to], references: [user_id])
+  department Department? @relation(fields: [department_id], references: [department_id])
+
+  @@map("complaints")
+}
+
+model MarketPrice {
+  price_id    Int      @id @default(autoincrement())
+  crop_id     Int
+  market_name String
+  price       Decimal
+  unit        String   @default("kg")
+  change_pct  Float    @default(0)
+  recorded_at DateTime @default(now())
+
+  // ERD: CROP has MARKET_PRICE
+  crop Crop @relation(fields: [crop_id], references: [crop_id], onDelete: Cascade)
+
+  @@map("market_prices")
+}
+
+model ForumPost {
+  post_id     Int      @id @default(autoincrement())
+  user_id     Int
+  category_id Int?
+  title       String
+  content     String
+  tags        String   @default("[]")
+  likes       Int      @default(0)
+  views       Int      @default(0)
+  status      String   @default("PENDING")
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  // ERD: USER creates FORUM_POST
+  user     User      @relation(fields: [user_id], references: [user_id])
+  category Category? @relation(fields: [category_id], references: [category_id])
+
+  @@map("forum_posts")
+}
+
+model UserActivity {
+  activity_id Int      @id @default(autoincrement())
+  user_id     Int
+  action      String
+  entity_type String
+  entity_id   Int?
+  metadata    String?
+  created_at  DateTime @default(now())
+
+  // ERD: USER performs USER_ACTIVITY
+  user User @relation(fields: [user_id], references: [user_id])
+
+  @@map("user_activities")
+}
+
+model ExpertBooking {
+  booking_id   Int      @id @default(autoincrement())
+  user_id      Int
+  expert_id    Int
+  status       String   @default("PENDING")
+  booking_date DateTime
+  notes        String?
+  created_at   DateTime @default(now())
+
+  // ERD: USER books EXPERT_BOOKING, EXPERT has bookings
+  user   User   @relation(fields: [user_id], references: [user_id])
+  expert Expert @relation(fields: [expert_id], references: [expert_id])
+
+  @@map("expert_bookings")
+}
+
+model SavedService {
+  saved_id   Int      @id @default(autoincrement())
+  user_id    Int
+  service_id Int
+  saved_at   DateTime @default(now())
+
+  // ERD: USER saves SAVED_SERVICE, SERVICE includes SAVED_SERVICE
+  user    User    @relation(fields: [user_id], references: [user_id])
+  service Service @relation(fields: [service_id], references: [service_id])
+
+  @@unique([user_id, service_id])
+  @@map("saved_services")
+}
+
+model CropAdvice {
+  advice_id  Int      @id @default(autoincrement())
+  expert_id  Int?
+  crop_id    Int
+  weather_id Int?
+  title      String
+  content    String
+  created_at DateTime @default(now())
+
+  // ERD: EXPERT writes CROP_ADVICE, WEATHER publishes CROP_ADVICE, CROP influences CROP_ADVICE, USER receives
+  expert  Expert?  @relation(fields: [expert_id], references: [expert_id])
+  crop    Crop     @relation(fields: [crop_id], references: [crop_id])
+  weather Weather? @relation(fields: [weather_id], references: [weather_id])
+
+  @@map("crop_advice")
+}
+
+// ============================================
+// JUSTIFIED ADDITIONAL TABLES
+// ============================================
+
+model Poll {
+  poll_id    Int       @id @default(autoincrement())
+  question   String
+  options    String    @default("[]")
+  is_active  Boolean   @default(true)
+  created_by Int
+  created_at DateTime  @default(now())
+  expires_at DateTime?
+
+  // VOTE needs a POLL (ERD has VOTE but no POLL entity — necessary addition)
+  votes Vote[]
+
+  @@map("polls")
+}
+
+model Notification {
+  notification_id Int      @id @default(autoincrement())
+  user_id         Int
+  type            String
+  title           String
+  message         String
+  is_read         Boolean  @default(false)
+  created_at      DateTime @default(now())
+
+  // Observer pattern support
+  user User @relation(fields: [user_id], references: [user_id])
+
+  @@map("notifications")
+}
+
+model AuditLog {
+  log_id      Int      @id @default(autoincrement())
+  admin_id    Int
+  action      String
+  entity_type String
+  entity_id   Int?
+  details     String?
+  ip_address  String?
+  created_at  DateTime @default(now())
+
+  // Admin audit trail
+  admin User @relation(fields: [admin_id], references: [user_id])
+
+  @@map("audit_logs")
+}
+
+model Category {
+  category_id Int      @id @default(autoincrement())
+  name        String   @unique
+  type        String
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+
+  // Used by multiple entities for categorization
+  services    Service[]
+  crops       Crop[]
+  forum_posts ForumPost[]
+
+  @@map("categories")
+}
+
+model RefreshToken {
+  token_id   Int      @id @default(autoincrement())
+  user_id    Int
+  token      String   @unique
+  expires_at DateTime
+  created_at DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+// ============================================
+// NEW SMART VILLAGE MODULES
+// ============================================
+
+model Department {
+  department_id Int      @id @default(autoincrement())
+  name          String   @unique
+  description   String?
+  created_at    DateTime @default(now())
+
+  users      User[]
+  projects   Project[]
+  complaints Complaint[]
+
+  @@map("departments")
+}
+
+model Project {
+  project_id     Int       @id @default(autoincrement())
+  title          String
+  description    String
+  budget         Decimal
+  spent          Decimal   @default(0)
+  funding_source String?
+  contractor     String?
+  deadline       DateTime?
+  status         String    @default("PLANNED")
+  progress       Int       @default(0)
+  evidence_url   String?
+
+  department_id Int?
+  assigned_to   Int?
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  department Department? @relation(fields: [department_id], references: [department_id])
+  officer    User?       @relation("ProjectOfficer", fields: [assigned_to], references: [user_id])
+
+  @@map("projects")
+}
+
+model Message {
+  message_id    Int      @id @default(autoincrement())
+  sender_id     Int
+  receiver_id   Int? // null if it's a department or group message
+  department_id Int?
+  content       String
+  media_url     String?
+  is_read       Boolean  @default(false)
+  created_at    DateTime @default(now())
+
+  sender   User  @relation("MessageSender", fields: [sender_id], references: [user_id])
+  receiver User? @relation("MessageReceiver", fields: [receiver_id], references: [user_id])
+
+  @@map("messages")
+}
+
+// ============================================
+// ENUMS
+// ============================================
