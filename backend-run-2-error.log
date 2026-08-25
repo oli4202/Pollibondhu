@@ -1,0 +1,17 @@
+Error: listen EADDRINUSE: address already in use :::4000
+    at Server.setupListenHandle [as _listen2] (node:net:2167:16)
+    at listenInCluster (node:net:2224:12)
+    at Server.listen (node:net:2344:7)
+    at Object.<anonymous> (C:\Users\DUBAI LAPTOP BAZAR\Downloads\pollibondhu\pollibondhu\backend\src\app.ts:78:8)
+    at Module._compile (node:internal/modules/cjs/loader:1872:14)
+    at Module.m._compile (C:\Users\DUBAI LAPTOP BAZAR\Downloads\pollibondhu\pollibondhu\backend\node_modules\ts-node\src\index.ts:1618:23)
+    at node:internal/modules/cjs/loader:2003:10
+    at Object.require.extensions.<computed> [as .ts] (C:\Users\DUBAI LAPTOP BAZAR\Downloads\pollibondhu\pollibondhu\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1594:32)
+    at Module._load (node:internal/modules/cjs/loader:1396:12) {
+  code: 'EADDRINUSE',
+  errno: -4091,
+  syscall: 'listen',
+  address: '::',
+  port: 4000
+}

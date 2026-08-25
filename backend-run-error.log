@@ -1,0 +1,14 @@
+C:\Users\DUBAI LAPTOP BAZAR\Downloads\pollibondhu\pollibondhu\backend\src\routes\aiRoutes.ts:9
+router.post('/chat', authMiddleware, async (req: AuthenticatedRequest, res) => {
+                     ^
+ReferenceError: authMiddleware is not defined
+    at Object.<anonymous> (C:\Users\DUBAI LAPTOP BAZAR\Downloads\pollibondhu\pollibondhu\backend\src\routes\aiRoutes.ts:9:22)
+    at Module._compile (node:internal/modules/cjs/loader:1872:14)
+    at Module.m._compile (C:\Users\DUBAI LAPTOP BAZAR\Downloads\pollibondhu\pollibondhu\backend\node_modules\ts-node\src\index.ts:1618:23)
+    at node:internal/modules/cjs/loader:2003:10
+    at Object.require.extensions.<computed> [as .ts] (C:\Users\DUBAI LAPTOP BAZAR\Downloads\pollibondhu\pollibondhu\backend\node_modules\ts-node\src\index.ts:1621:12)
+    at Module.load (node:internal/modules/cjs/loader:1594:32)
+    at Module._load (node:internal/modules/cjs/loader:1396:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+    at Module.require (node:internal/modules/cjs/loader:1617:12)
+    at require (node:internal/modules/helpers:153:16)

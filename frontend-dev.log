@@ -1,0 +1,10 @@
+
+> pollibondhu-frontend@1.0.0 dev
+> vite --host 0.0.0.0
+
+Port 5173 is in use, trying another one...
+
+  VITE v5.4.21  ready in 640 ms
+
+  ➜  Local:   http://localhost:5174/
+  ➜  Network: http://192.168.1.10:5174/
