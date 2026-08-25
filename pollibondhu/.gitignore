@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+*.js.map
+*.d.ts.map
+
+# Prisma compiled seed files
+backend/prisma/seed.js
+backend/prisma/seed.d.ts
+backend/prisma/seed.js.map
+backend/prisma/seed.d.ts.map
+
+# Database files (SQLite)
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# Log files
+*.log
+logs/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Freebuff folder
+.freebuff/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
