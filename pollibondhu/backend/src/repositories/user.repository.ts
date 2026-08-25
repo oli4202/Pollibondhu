@@ -17,9 +17,9 @@ export class UserRepository {
     if (role) where.role = role as any;
     if (search) {
       where.OR = [
-        { full_name: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } },
-        { district: { contains: search, mode: 'insensitive' } },
+        { full_name: { contains: search } },
+        { email: { contains: search } },
+        { district: { contains: search } },
       ];
     }
 

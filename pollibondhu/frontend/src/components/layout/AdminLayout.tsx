@@ -1,15 +1,31 @@
 import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { Sprout, LayoutDashboard, Users, Wrench, MessageSquare, LogOut } from 'lucide-react';
+import { Sprout, LayoutDashboard, Users, Wrench, MessageSquare, FolderOpen, DollarSign, LogOut, Code, Shield, Building2, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
-import { cn } from '@/utils/cn';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import AiChatWidget from '@/components/chat/AiChatWidget';
+import NotificationBell from '@/components/notifications/NotificationBell';
+import { cn } from '@/utils/cn';
+import { useState } from 'react';
 
 const navItems = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/admin/users', label: 'Users', icon: Users },
   { to: '/admin/services', label: 'Services', icon: Wrench },
-  { to: '/admin/complaints', label: 'Complaints', icon: MessageSquare },
+  { to: '/admin/complaints', label: 'Complaints', icon: AlertTriangle },
+  { to: '/admin/departments', label: 'Departments', icon: Building2 },
+  { to: '/admin/projects', label: 'Projects', icon: FolderOpen },
+  { to: '/admin/budgets', label: 'Budgets', icon: DollarSign },
+  { to: '/admin/audit', label: 'Audit Logs', icon: Shield },
+  { to: '/admin/endpoints', label: 'API Endpoints', icon: Code },
+];
+
+const mobileNavItems = [
+  { to: '/admin', label: 'Home', icon: LayoutDashboard },
+  { to: '/admin/users', label: 'Users', icon: Users },
+  { to: '/admin/services', label: 'Services', icon: Wrench },
+  { to: '/admin/complaints', label: 'Issues', icon: AlertTriangle },
+  { to: '/admin/audit', label: 'Audit', icon: Shield },
 ];
 
 export default function AdminLayout() {
@@ -17,46 +33,112 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
   function handleLogout() {
     logout();
     navigate('/');
   }
 
+  function isActive(to: string) {
+    if (to === '/admin') return location.pathname === '/admin';
+    return location.pathname.startsWith(to);
+  }
+
   return (
-    <div className="min-h-screen flex">
-      <aside className="w-64 bg-earth-900 text-white hidden md:flex flex-col">
-        <div className="p-5 border-b border-earth-700">
+    <div className="min-h-screen flex bg-earth-50">
+      {/* Skip to content */}
+      <a href="#main-content" className="skip-link">
+        Skip to main content
+      </a>
+
+      {/* Desktop Sidebar */}
+      <aside className="w-60 bg-earth-900 text-white hidden md:flex flex-col shrink-0">
+        <div className="p-4 border-b border-earth-700">
           <Link to="/" className="flex items-center gap-2 font-bold text-polli-400">
-            <Sprout size={22} /> PolliBondhu
+            <Sprout size={20} /> PolliBondhu
           </Link>
-          <div className="text-xs text-earth-400 mt-1">Admin Panel</div>
+          <div className="text-xs text-earth-500 mt-1">Admin Panel</div>
         </div>
-        <nav className="flex-1 p-4 space-y-1">
+        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto" aria-label="Admin navigation">
           {navItems.map(({ to, label, icon: Icon }) => (
             <Link
               key={to}
               to={to}
               className={cn(
-                'flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm transition-colors',
-                location.pathname === to ? 'bg-polli-700 text-white' : 'text-earth-300 hover:bg-earth-800'
+                'flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                isActive(to)
+                  ? 'bg-polli-700 text-white'
+                  : 'text-earth-300 hover:bg-earth-800 hover:text-white'
               )}
             >
-              <Icon size={16} /> {label}
+              <Icon size={18} /> {label}
             </Link>
           ))}
         </nav>
-        <div className="p-4 border-t border-earth-700">
-          <div className="text-sm font-medium mb-1">{user?.full_name}</div>
-          <div className="text-xs text-earth-400 mb-3">{user?.role}</div>
-          <Button size="sm" variant="outline" className="w-full border-earth-600 text-earth-200 hover:bg-earth-800" onClick={handleLogout}>
-            <LogOut size={14} className="mr-1" /> Logout
-          </Button>
+        <div className="p-3 border-t border-earth-700">
+          <div className="flex items-center gap-2 px-3 py-2 mb-2">
+            <div className="h-8 w-8 rounded-full bg-polli-600 text-white flex items-center justify-center text-sm font-bold">
+              {user?.full_name?.charAt(0) || 'A'}
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-white truncate">{user?.full_name}</p>
+              <p className="text-xs text-earth-400 truncate">{user?.role || user?.roles?.[0]}</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <NotificationBell />
+            <Button
+              size="sm"
+              variant="outline"
+              className="flex-1 border-red-800 text-red-400 hover:bg-red-900/50 hover:text-red-300 hover:border-red-700 transition-colors"
+              onClick={() => setShowLogoutConfirm(true)}
+            >
+              <LogOut size={14} /> Logout
+            </Button>
+          </div>
         </div>
       </aside>
-      <main className="flex-1 p-6 md:p-8 bg-earth-100 min-h-screen relative">
+
+      {/* Main Content */}
+      <main id="main-content" className="flex-1 p-4 md:p-6 pb-20 md:pb-6 relative overflow-auto">
         <Outlet />
         <AiChatWidget />
       </main>
+
+      {/* Mobile Bottom Tab Bar */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-earth-900 border-t border-earth-700" aria-label="Admin mobile navigation">
+        <div className="flex items-center justify-around px-2 py-1">
+          {mobileNavItems.map(({ to, label, icon: Icon }) => {
+            const active = isActive(to);
+            return (
+              <Link
+                key={to}
+                to={to}
+                className={cn(
+                  'flex flex-col items-center gap-0.5 px-3 py-2 rounded-lg text-[10px] font-medium min-w-[56px] transition-colors',
+                  active
+                    ? 'text-polli-400'
+                    : 'text-earth-400 hover:text-earth-200'
+                )}
+              >
+                <Icon size={20} strokeWidth={active ? 2.5 : 2} />
+                {label}
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
+      <ConfirmDialog
+        isOpen={showLogoutConfirm}
+        onClose={() => setShowLogoutConfirm(false)}
+        onConfirm={handleLogout}
+        title="Log out"
+        message="Are you sure you want to log out? You will need to log in again to access your account."
+        confirmLabel="Log Out"
+        cancelLabel="Stay"
+        variant="danger"
+      />
     </div>
   );
 }

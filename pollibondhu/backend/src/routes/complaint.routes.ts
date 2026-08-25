@@ -1,13 +1,18 @@
 import { Router } from 'express';
 import { submitComplaint, listComplaints, updateComplaintStatus } from '../controllers/complaint.controller';
-import { authMiddleware, requireRole } from '../middleware/auth.middleware';
+import { authMiddleware, requirePermission } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validate.middleware';
 import { complaintSchema, updateStatusSchema } from '../validators';
 
 const router = Router();
 
-router.post('/', authMiddleware, validate(complaintSchema), submitComplaint);
-router.get('/', authMiddleware, listComplaints);
-router.put('/:id/status', authMiddleware, requireRole('ADMIN'), validate(updateStatusSchema), updateComplaintStatus);
+// Citizens can submit complaints
+router.post('/', authMiddleware, requirePermission('complaint.create'), validate(complaintSchema), submitComplaint);
+
+// Authenticated users can view complaints (scoping happens in service layer)
+router.get('/', authMiddleware, requirePermission('complaint.view'), listComplaints);
+
+// Officers/admins can update complaint status
+router.put('/:id/status', authMiddleware, requirePermission('complaint.update', 'complaint.resolve'), validate(updateStatusSchema), updateComplaintStatus);
 
 export default router;

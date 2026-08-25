@@ -1,0 +1,474 @@
+import { Router, Request, Response } from 'express';
+import { authMiddleware } from '../middleware/auth.middleware';
+import { sendSuccess, sendError } from '../utils/apiResponse';
+import { prisma } from '../patterns/singleton/DatabaseManager';
+
+const router = Router();
+
+// ============================================
+// CONVERSATIONS (1-on-1, groups, channels)
+// ============================================
+
+// List all conversations for the authenticated user
+router.get('/conversations', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.user_id;
+    const members = await (prisma as any).chatMember.findMany({
+      where: { user_id: userId },
+      include: {
+        conversation: {
+          include: {
+            members: { include: { user: { select: { user_id: true, full_name: true, avatar_url: true, role: true } } } },
+            messages: { orderBy: { created_at: 'desc' }, take: 1, include: { sender: { select: { full_name: true } } } },
+            provider: { select: { full_name: true, role: true } },
+          },
+        },
+      },
+      orderBy: { conversation: { updated_at: 'desc' } },
+    });
+
+    const conversations = members.map((m: any) => ({
+      ...m.conversation,
+      my_role: m.role,
+      last_message: m.conversation.messages[0] || null,
+      unread_count: 0, // TODO: track reads
+    }));
+
+    sendSuccess(res, conversations);
+  } catch (err: any) { sendError(res, err.message, 500); }
+});
+
+// Create a direct (1-on-1) conversation
+router.post('/conversations/direct', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.user_id;
+    const { user_id: targetUserId } = req.body;
+    if (!targetUserId) { sendError(res, 'user_id required', 400); return; }
+
+    // Check if direct conversation already exists
+    const myMemberships = await (prisma as any).chatMember.findMany({
+      where: { user_id: userId, conversation: { type: 'DIRECT' } },
+      include: { conversation: { include: { members: true } } },
+    });
+
+    for (const m of myMemberships) {
+      if (m.conversation.members.some((mem: any) => mem.user_id === targetUserId && mem.user_id !== userId)) {
+        sendSuccess(res, m.conversation, 'Existing conversation');
+        return;
+      }
+    }
+
+    const conversation = await (prisma as any).chatConversation.create({
+      data: {
+        type: 'DIRECT',
+        created_by: userId,
+        members: {
+          create: [
+            { user_id: userId, role: 'OWNER' },
+            { user_id: targetUserId, role: 'MEMBER' },
+          ],
+        },
+      },
+      include: { members: { include: { user: { select: { user_id: true, full_name: true, avatar_url: true, role: true } } } } },
+    });
+
+    sendSuccess(res, conversation, 'Conversation created', 201);
+  } catch (err: any) { sendError(res, err.message, 500); }
+});
+
+// Create a group conversation
+router.post('/conversations/group', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.user_id;
+    const { name, description, member_ids } = req.body;
+    if (!name) { sendError(res, 'Group name required', 400); return; }
+
+    const allMembers = [userId, ...(member_ids || [])];
+    const uniqueMembers = [...new Set(allMembers)];
+
+    const conversation = await (prisma as any).chatConversation.create({
+      data: {
+        type: 'GROUP',
+        name,
+        description,
+        created_by: userId,
+        members: {
+          create: uniqueMembers.map((id: number) => ({
+            user_id: id,
+            role: id === userId ? 'OWNER' : 'MEMBER',
+          })),
+        },
+      },
+      include: { members: { include: { user: { select: { user_id: true, full_name: true, avatar_url: true, role: true } } } } },
+    });
+
+    sendSuccess(res, conversation, 'Group created', 201);
+  } catch (err: any) { sendError(res, err.message, 500); }
+});
+
+// Create a channel (like Telegram/WhatsApp channels — provider broadcasts)
+router.post('/conversations/channel', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.user_id;
+    const { name, description, service_id } = req.body;
+    if (!name) { sendError(res, 'Channel name required', 400); return; }
+
+    const conversation = await (prisma as any).chatConversation.create({
+      data: {
+        type: 'CHANNEL',
+        name,
+        description,
+        created_by: userId,
+        provider_id: userId,
+        service_id: service_id || null,
+        members: {
+          create: { user_id: userId, role: 'OWNER' },
+        },
+      },
+      include: {
+        members: { include: { user: { select: { user_id: true, full_name: true, avatar_url: true, role: true } } } },
+        service: { select: { title: true } },
+      },
+    });
+
+    sendSuccess(res, conversation, 'Channel created', 201);
+  } catch (err: any) { sendError(res, err.message, 500); }
+});
+
+// Join a channel
+router.post('/conversations/:id/join', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.user_id;
+    const conversationId = parseInt(req.params.id);
+
+    const existing = await (prisma as any).chatMember.findUnique({
+      where: { conversation_id_user_id: { conversation_id: conversationId, user_id: userId } },
+    });
+    if (existing) { sendSuccess(res, existing, 'Already a member'); return; }
+
+    const member = await (prisma as any).chatMember.create({
+      data: { conversation_id: conversationId, user_id: userId, role: 'MEMBER' },
+    });
+
+    sendSuccess(res, member, 'Joined channel', 201);
+  } catch (err: any) { sendError(res, err.message, 500); }
+});
+
+// List channels (public)
+router.get('/channels', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const channels = await (prisma as any).chatConversation.findMany({
+      where: { type: 'CHANNEL', is_active: true },
+      include: {
+        provider: { select: { full_name: true, role: true, avatar_url: true } },
+        service: { select: { title: true } },
+        _count: { select: { members: true, posts: true } },
+      },
+      orderBy: { created_at: 'desc' },
+    });
+    sendSuccess(res, channels);
+  } catch (err: any) { sendError(res, err.message, 500); }
+});
+
+// List available providers (for 1-on-1 chat)
+router.get('/providers', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const providers = await (prisma as any).user.findMany({
+      where: {
+        is_active: true,
+        role: { in: ['SERVICE_PROVIDER', 'GOV_SERVICE_PROVIDER', 'OFFICER', 'NGO_ADMIN'] },
+      },
+      select: { user_id: true, full_name: true, role: true, avatar_url: true, district: true },
+    });
+    sendSuccess(res, providers);
+  } catch (err: any) { sendError(res, err.message, 500); }
+});
+
+// List all users (for group creation)
+router.get('/users', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.user_id;
+    const users = await (prisma as any).user.findMany({
+      where: { is_active: true, user_id: { not: userId } },
+      select: { user_id: true, full_name: true, role: true, avatar_url: true, district: true },
+      take: 100,
+    });
+    sendSuccess(res, users);
+  } catch (err: any) { sendError(res, err.message, 500); }
+});
+
+// ============================================
+// MESSAGES
+// ============================================
+
+// Get messages for a conversation
+router.get('/conversations/:id/messages', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const conversationId = parseInt(req.params.id);
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 50;
+
+    const messages = await (prisma as any).chatMessage.findMany({
+      where: { conversation_id: conversationId, is_deleted: false },
+      include: {
+        sender: { select: { user_id: true, full_name: true, avatar_url: true, role: true } },
+        reply_to: { select: { message_id: true, content: true, sender: { select: { full_name: true } } } },
+      },
+      orderBy: { created_at: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+
+    sendSuccess(res, messages.reverse());
+  } catch (err: any) { sendError(res, err.message, 500); }
+});
+
+// Send a message (REST fallback — primary is via WebSocket)
+router.post('/conversations/:id/messages', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.user_id;
+    const conversationId = parseInt(req.params.id);
+    const { content, message_type, media_url, reply_to_id } = req.body;
+
+    // Verify membership
+    const member = await (prisma as any).chatMember.findUnique({
+      where: { conversation_id_user_id: { conversation_id: conversationId, user_id: userId } },
+    });
+    if (!member) { sendError(res, 'Not a member of this conversation', 403); return; }
+
+    const message = await (prisma as any).chatMessage.create({
+      data: {
+        conversation_id: conversationId,
+        sender_id: userId,
+        content,
+        message_type: message_type || 'TEXT',
+        media_url,
+        reply_to_id: reply_to_id || null,
+      },
+      include: { sender: { select: { user_id: true, full_name: true, avatar_url: true, role: true } } },
+    });
+
+    // Update conversation timestamp
+    await (prisma as any).chatConversation.update({
+      where: { conversation_id: conversationId },
+      data: { updated_at: new Date() },
+    });
+
+    sendSuccess(res, message, 'Message sent', 201);
+  } catch (err: any) { sendError(res, err.message, 500); }
+});
+
+// ============================================
+// CHANNEL POSTS (Telegram-like)
+// ============================================
+
+// Get channel posts
+router.get('/conversations/:id/posts', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const conversationId = parseInt(req.params.id);
+    const posts = await (prisma as any).channelPost.findMany({
+      where: { conversation_id: conversationId },
+      include: {
+        author: { select: { user_id: true, full_name: true, avatar_url: true, role: true } },
+        comments: { include: { user: { select: { full_name: true, avatar_url: true } } }, orderBy: { created_at: 'desc' } },
+      },
+      orderBy: [{ is_pinned: 'desc' }, { created_at: 'desc' }],
+    });
+    sendSuccess(res, posts);
+  } catch (err: any) { sendError(res, err.message, 500); }
+});
+
+// Create a channel post
+router.post('/conversations/:id/posts', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.user_id;
+    const conversationId = parseInt(req.params.id);
+    const { title, content, post_type, media_url, media_type } = req.body;
+
+    // Verify membership
+    const member = await (prisma as any).chatMember.findUnique({
+      where: { conversation_id_user_id: { conversation_id: conversationId, user_id: userId } },
+    });
+    if (!member) { sendError(res, 'Not a member', 403); return; }
+
+    const post = await (prisma as any).channelPost.create({
+      data: {
+        conversation_id: conversationId,
+        author_id: userId,
+        title,
+        content,
+        post_type: post_type || 'UPDATE',
+        media_url,
+        media_type,
+      },
+      include: { author: { select: { user_id: true, full_name: true, avatar_url: true, role: true } } },
+    });
+
+    sendSuccess(res, post, 'Post created', 201);
+  } catch (err: any) { sendError(res, err.message, 500); }
+});
+
+// Comment on a channel post
+router.post('/posts/:id/comments', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.user_id;
+    const postId = parseInt(req.params.id);
+    const { content } = req.body;
+
+    const comment = await (prisma as any).channelComment.create({
+      data: { post_id: postId, user_id: userId, content },
+      include: { user: { select: { full_name: true, avatar_url: true } } },
+    });
+
+    await (prisma as any).channelPost.update({
+      where: { post_id: postId },
+      data: { comments_count: { increment: 1 } },
+    });
+
+    sendSuccess(res, comment, 'Comment added', 201);
+  } catch (err: any) { sendError(res, err.message, 500); }
+});
+
+// ============================================
+// PROVIDER COMPLAINTS
+// ============================================
+
+// File a complaint to a provider
+router.post('/complaints', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.user_id;
+    const { provider_id, service_id, subject, description, category, priority } = req.body;
+    if (!provider_id || !subject || !description) {
+      sendError(res, 'provider_id, subject, description required', 400); return;
+    }
+
+    // Auto-create a conversation for this complaint
+    const conversation = await (prisma as any).chatConversation.create({
+      data: {
+        type: 'DIRECT',
+        name: `Complaint: ${subject}`,
+        created_by: userId,
+        members: {
+          create: [
+            { user_id: userId, role: 'OWNER' },
+            { user_id: provider_id, role: 'MEMBER' },
+          ],
+        },
+      },
+    });
+
+    const complaint = await (prisma as any).providerComplaint.create({
+      data: {
+        user_id: userId,
+        provider_id,
+        service_id: service_id || null,
+        conversation_id: conversation.conversation_id,
+        subject,
+        description,
+        category: category || 'GENERAL',
+        priority: priority || 'MEDIUM',
+      },
+      include: {
+        user: { select: { full_name: true } },
+        provider: { select: { full_name: true } },
+        service: { select: { title: true } },
+      },
+    });
+
+    sendSuccess(res, complaint, 'Complaint filed', 201);
+  } catch (err: any) { sendError(res, err.message, 500); }
+});
+
+// List complaints (for a provider or user)
+router.get('/complaints', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.user_id;
+    const role = (req as any).user?.role;
+    const isProvider = ['SERVICE_PROVIDER', 'GOV_SERVICE_PROVIDER', 'OFFICER', 'ADMIN', 'SUPER_ADMIN'].includes(role);
+
+    const where: any = isProvider ? { provider_id: userId } : { user_id: userId };
+
+    const complaints = await (prisma as any).providerComplaint.findMany({
+      where,
+      include: {
+        user: { select: { full_name: true, avatar_url: true } },
+        provider: { select: { full_name: true, avatar_url: true } },
+        service: { select: { title: true } },
+      },
+      orderBy: { created_at: 'desc' },
+    });
+
+    sendSuccess(res, complaints);
+  } catch (err: any) { sendError(res, err.message, 500); }
+});
+
+// Respond to a complaint
+router.put('/complaints/:id/respond', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.user_id;
+    const complaintId = parseInt(req.params.id);
+    const { response, status } = req.body;
+
+    const complaint = await (prisma as any).providerComplaint.update({
+      where: { complaint_id: complaintId },
+      data: {
+        response,
+        status: status || 'IN_PROGRESS',
+        responded_at: new Date(),
+      },
+    });
+
+    sendSuccess(res, complaint, 'Complaint updated');
+  } catch (err: any) { sendError(res, err.message, 500); }
+});
+
+// Resolve a complaint
+router.put('/complaints/:id/resolve', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const complaintId = parseInt(req.params.id);
+    const { rating, feedback } = req.body;
+
+    const complaint = await (prisma as any).providerComplaint.update({
+      where: { complaint_id: complaintId },
+      data: {
+        status: 'RESOLVED',
+        resolved_at: new Date(),
+        rating: rating || null,
+        feedback: feedback || null,
+      },
+    });
+
+    sendSuccess(res, complaint, 'Complaint resolved');
+  } catch (err: any) { sendError(res, err.message, 500); }
+});
+
+// ============================================
+// SERVICE GROUPS (Provider services with channels)
+// ============================================
+
+// List service groups by provider type
+router.get('/service-groups', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const groups = await (prisma as any).chatConversation.findMany({
+      where: { type: 'CHANNEL', is_active: true },
+      include: {
+        provider: { select: { user_id: true, full_name: true, role: true } },
+        service: { select: { title: true, description: true, category: { select: { name: true } } } },
+        _count: { select: { members: true, posts: true } },
+      },
+      orderBy: { created_at: 'desc' },
+    });
+
+    // Group by provider role
+    const grouped: Record<string, any[]> = {};
+    for (const g of groups) {
+      const providerType = g.provider?.role || 'OTHER';
+      if (!grouped[providerType]) grouped[providerType] = [];
+      grouped[providerType].push(g);
+    }
+
+    sendSuccess(res, { groups, grouped });
+  } catch (err: any) { sendError(res, err.message, 500); }
+});
+
+export default router;

@@ -12,25 +12,46 @@ datasource db {
 // ============================================
 
 model User {
-  user_id       Int      @id @default(autoincrement())
-  email         String   @unique
-  password_hash String
-  phone         String?  @unique
-  nid           String?  @unique
-  full_name     String
-  avatar_url    String?
-  district      String?
-  division      String?
-  upazila       String?
-  role          String   @default("USER")
-  is_active     Boolean  @default(true)
-  created_at    DateTime @default(now())
-  updated_at    DateTime @updatedAt
+  user_id           Int      @id @default(autoincrement())
+  email             String   @unique
+  password_hash     String
+  phone             String?  @unique
+  nid               String?  @unique
+  full_name         String
+  avatar_url        String?
+  district          String?
+  division          String?
+  upazila           String?
+  role              String   @default("USER")
+  is_active         Boolean  @default(true)
+  auth_provider     String?  // google, facebook
+  auth_provider_id  String?  // OAuth provider user ID
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
 
-  // RBAC & Assignments
+  // Legacy RBAC (kept for backward compatibility)
   department_id Int?
-  assigned_area String? // JSON or comma-separated location hierarchy
+  assigned_area String?
   department    Department? @relation(fields: [department_id], references: [department_id])
+
+  // New RBAC relationships
+  user_roles            UserRole[]
+  user_departments      UserDepartment[]
+  user_locations        UserLocation[] // Applications
+  applications          Application[]
+  application_documents ApplicationDocument[]
+
+  // Education
+  teaching_courses CourseTeacher[]
+  student_profile  Student?
+
+  // NGOs
+  organisation_members OrganisationMember[]
+  programme_enrolments ProgrammeEnrolment[]
+
+  // Agriculture
+  soil_test_requests SoilTestRequest[] @relation("SoilTestRequester")
+  soil_test_officer  SoilTestRequest[] @relation("SoilTestOfficer")
 
   // User relationships per ERD
   certificates    Certificate[]
@@ -54,10 +75,29 @@ model User {
   approved_certificates Certificate[] @relation("CertificateApprover")
 
   // Smart Village Additions
-  assigned_complaints Complaint[] @relation("ComplaintAssignee")
-  assigned_projects   Project[]   @relation("ProjectOfficer")
-  sent_messages       Message[]   @relation("MessageSender")
-  received_messages   Message[]   @relation("MessageReceiver")
+  assigned_complaints Complaint[]         @relation("ComplaintAssignee")
+  assigned_projects   Project[]           @relation("ProjectOfficer")
+  sent_messages       Message[]           @relation("MessageSender")
+  received_messages   Message[]           @relation("MessageReceiver")
+  ApplicationUpdate   ApplicationUpdate[]
+
+  // Village Market (buy/sell/rent)
+  listings Listing[]
+
+  // Price Alerts
+  price_alerts      PriceAlert[]
+  price_alert_logs  PriceAlertLog[]
+
+  // Chat & Messaging
+  chat_conversations_created ChatConversation[] @relation("ChatCreator")
+  chat_conversations_owned   ChatConversation[] @relation("ChatProvider")
+  chat_memberships           ChatMember[]
+  chat_messages              ChatMessage[]
+  channel_posts              ChannelPost[]
+  channel_comments           ChannelComment[]
+  provider_complaints_filed  ProviderComplaint[] @relation("ComplaintFiled")
+  provider_complaints_rcvd   ProviderComplaint[] @relation("ComplaintReceived")
+  message_reads              MessageRead[]
 
   @@map("users")
 }
@@ -75,6 +115,7 @@ model Crop {
   // ERD: CROP has MARKET_PRICE, influences CROP_ADVICE
   market_prices MarketPrice[]
   crop_advices  CropAdvice[]
+  seeds         Seed[]
   category      Category?     @relation(fields: [category_id], references: [category_id])
 
   @@map("crops")
@@ -95,11 +136,97 @@ model Service {
   updated_at   DateTime @updatedAt
 
   // ERD: SERVICE has SAVED_SERVICE (includes)
-  saved_by SavedService[]
-  provider User           @relation(fields: [provider_id], references: [user_id])
-  category Category?      @relation(fields: [category_id], references: [category_id])
+  saved_by     SavedService[]
+  applications Application[]
+  provider     User           @relation(fields: [provider_id], references: [user_id])
+  category     Category?      @relation(fields: [category_id], references: [category_id])
+
+  // Chat & Complaints
+  conversations ChatConversation[]
+  complaints    ProviderComplaint[]
 
   @@map("services")
+}
+
+// ============================================
+// APPLICATIONS
+// ============================================
+
+model Application {
+  application_id Int    @id @default(autoincrement())
+  tracking_id    String @unique
+  user_id        Int
+  service_id     Int?
+  category_id    Int?
+  department_id  Int?
+
+  status   String @default("SUBMITTED")
+  priority String @default("NORMAL")
+
+  applicant_name String?
+  applicant_data String?
+
+  submitted_at DateTime  @default(now())
+  reviewed_at  DateTime?
+  reviewed_by  Int?
+  approved_at  DateTime?
+  deadline     DateTime?
+  resolved_at  DateTime?
+
+  notes            String?
+  rejection_reason String?
+  citizen_feedback String?
+  citizen_rating   Int?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  user       User?                 @relation(fields: [user_id], references: [user_id])
+  service    Service?              @relation(fields: [service_id], references: [service_id])
+  department Department?           @relation(fields: [department_id], references: [department_id])
+  documents  ApplicationDocument[]
+  updates    ApplicationUpdate[]
+
+  @@index([user_id])
+  @@index([status])
+  @@index([service_id])
+  @@map("applications")
+}
+
+model ApplicationDocument {
+  doc_id         Int       @id @default(autoincrement())
+  application_id Int
+  user_id        Int
+  doc_type       String
+  file_name      String
+  file_url       String
+  file_size      Int?
+  mime_type      String?
+  status         String    @default("PENDING")
+  verified_by    Int?
+  verified_at    DateTime?
+  created_at     DateTime  @default(now())
+
+  application Application @relation(fields: [application_id], references: [application_id], onDelete: Cascade)
+  user        User        @relation(fields: [user_id], references: [user_id])
+
+  @@map("application_documents")
+}
+
+model ApplicationUpdate {
+  update_id      Int      @id @default(autoincrement())
+  application_id Int
+  user_id        Int?
+  old_status     String?
+  new_status     String?
+  notes          String?
+  is_internal    Boolean  @default(false)
+  created_at     DateTime @default(now())
+
+  application Application @relation(fields: [application_id], references: [application_id], onDelete: Cascade)
+  user        User?       @relation(fields: [user_id], references: [user_id])
+
+  @@map("application_updates")
 }
 
 model Expert {
@@ -385,11 +512,15 @@ model Department {
   department_id Int      @id @default(autoincrement())
   name          String   @unique
   description   String?
+  is_active     Boolean  @default(true)
   created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
 
-  users      User[]
-  projects   Project[]
-  complaints Complaint[]
+  users            User[]
+  projects         Project[]
+  complaints       Complaint[]
+  user_departments UserDepartment[]
+  applications     Application[]
 
   @@map("departments")
 }
@@ -418,6 +549,144 @@ model Project {
   @@map("projects")
 }
 
+model ChatConversation {
+  conversation_id Int      @id @default(autoincrement())
+  type            String   // DIRECT, GROUP, CHANNEL
+  name            String?  // For groups/channels
+  description     String?  // For groups/channels
+  avatar_url      String?
+  created_by      Int
+  service_id      Int?     // Link to service if service-group
+  provider_id     Int?     // Provider who owns the channel
+  is_active       Boolean  @default(true)
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  creator  User      @relation("ChatCreator", fields: [created_by], references: [user_id])
+  provider User?     @relation("ChatProvider", fields: [provider_id], references: [user_id])
+  service  Service?  @relation(fields: [service_id], references: [service_id])
+  members  ChatMember[]
+  messages ChatMessage[]
+  complaints ProviderComplaint[]
+  posts     ChannelPost[]
+
+  @@map("chat_conversations")
+}
+
+model ChatMember {
+  id              Int      @id @default(autoincrement())
+  conversation_id Int
+  user_id         Int
+  role            String   @default("MEMBER") // OWNER, ADMIN, MODERATOR, MEMBER
+  is_muted        Boolean  @default(false)
+  joined_at       DateTime @default(now())
+
+  conversation ChatConversation @relation(fields: [conversation_id], references: [conversation_id], onDelete: Cascade)
+  user         User             @relation(fields: [user_id], references: [user_id])
+
+  @@unique([conversation_id, user_id])
+  @@map("chat_members")
+}
+
+model ChatMessage {
+  message_id      Int      @id @default(autoincrement())
+  conversation_id Int
+  sender_id       Int
+  content         String?
+  message_type    String   @default("TEXT") // TEXT, IMAGE, VOICE, FILE, VIDEO, SYSTEM
+  media_url       String?
+  media_duration  Int?     // For voice messages (seconds)
+  reply_to_id     Int?     // Reply to another message
+  is_edited       Boolean  @default(false)
+  is_deleted      Boolean  @default(false)
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  conversation ChatConversation @relation(fields: [conversation_id], references: [conversation_id], onDelete: Cascade)
+  sender       User             @relation(fields: [sender_id], references: [user_id])
+  reply_to     ChatMessage?     @relation("MessageReplies", fields: [reply_to_id], references: [message_id])
+  replies      ChatMessage[]    @relation("MessageReplies")
+  reads        MessageRead[]
+
+  @@index([conversation_id, created_at])
+  @@map("chat_messages")
+}
+
+model MessageRead {
+  id         Int      @id @default(autoincrement())
+  message_id Int
+  user_id    Int
+  read_at    DateTime @default(now())
+
+  message ChatMessage @relation(fields: [message_id], references: [message_id], onDelete: Cascade)
+  user    User        @relation(fields: [user_id], references: [user_id])
+
+  @@unique([message_id, user_id])
+  @@map("message_reads")
+}
+
+model ProviderComplaint {
+  complaint_id    Int      @id @default(autoincrement())
+  conversation_id Int?
+  user_id         Int
+  provider_id     Int
+  service_id      Int?
+  subject         String
+  description     String
+  category        String   @default("GENERAL") // GENERAL, SERVICE_QUALITY, DELAY, BILLING, OTHER
+  priority        String   @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
+  status          String   @default("OPEN") // OPEN, IN_PROGRESS, RESOLVED, CLOSED
+  response        String?
+  responded_at    DateTime?
+  resolved_at     DateTime?
+  rating          Int?     // 1-5 after resolution
+  feedback        String?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  user         User                 @relation("ComplaintFiled", fields: [user_id], references: [user_id])
+  provider     User                 @relation("ComplaintReceived", fields: [provider_id], references: [user_id])
+  service      Service?             @relation(fields: [service_id], references: [service_id])
+  conversation ChatConversation?    @relation(fields: [conversation_id], references: [conversation_id])
+
+  @@map("provider_complaints")
+}
+
+model ChannelPost {
+  post_id       Int      @id @default(autoincrement())
+  conversation_id Int
+  author_id     Int
+  title         String?
+  content       String
+  post_type     String   @default("UPDATE") // UPDATE, PROJECT, TUTORIAL, ANNOUNCEMENT, WORK_LOG
+  media_url     String?
+  media_type    String?  // image, video, document
+  likes         Int      @default(0)
+  comments_count Int     @default(0)
+  is_pinned     Boolean  @default(false)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  conversation ChatConversation @relation(fields: [conversation_id], references: [conversation_id], onDelete: Cascade)
+  author       User             @relation(fields: [author_id], references: [user_id])
+  comments     ChannelComment[]
+
+  @@map("channel_posts")
+}
+
+model ChannelComment {
+  comment_id Int      @id @default(autoincrement())
+  post_id    Int
+  user_id    Int
+  content    String
+  created_at DateTime @default(now())
+
+  post   ChannelPost @relation(fields: [post_id], references: [post_id], onDelete: Cascade)
+  user   User        @relation(fields: [user_id], references: [user_id])
+
+  @@map("channel_comments")
+}
+
 model Message {
   message_id    Int      @id @default(autoincrement())
   sender_id     Int
@@ -432,6 +701,387 @@ model Message {
   receiver User? @relation("MessageReceiver", fields: [receiver_id], references: [user_id])
 
   @@map("messages")
+}
+
+// ============================================
+// RBAC SYSTEM
+// ============================================
+
+model Role {
+  role_id     Int      @id @default(autoincrement())
+  name        String   @unique
+  description String?
+  is_system   Boolean  @default(false)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  role_permissions RolePermission[]
+  user_roles       UserRole[]
+
+  @@map("roles")
+}
+
+model Permission {
+  permission_id Int      @id @default(autoincrement())
+  name          String   @unique
+  module        String
+  description   String?
+  created_at    DateTime @default(now())
+
+  role_permissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  id            Int @id @default(autoincrement())
+  role_id       Int
+  permission_id Int
+
+  role       Role       @relation(fields: [role_id], references: [role_id], onDelete: Cascade)
+  permission Permission @relation(fields: [permission_id], references: [permission_id], onDelete: Cascade)
+
+  @@unique([role_id, permission_id])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  id      Int @id @default(autoincrement())
+  user_id Int
+  role_id Int
+
+  user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  role Role @relation(fields: [role_id], references: [role_id], onDelete: Cascade)
+
+  @@unique([user_id, role_id])
+  @@map("user_roles")
+}
+
+model UserDepartment {
+  id            Int @id @default(autoincrement())
+  user_id       Int
+  department_id Int
+
+  user       User       @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  department Department @relation(fields: [department_id], references: [department_id], onDelete: Cascade)
+
+  @@unique([user_id, department_id])
+  @@map("user_departments")
+}
+
+model Location {
+  location_id Int      @id @default(autoincrement())
+  name        String
+  type        String
+  parent_id   Int?
+  division    String?
+  district    String?
+  upazila     String?
+  union_name  String?
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+
+  parent         Location?      @relation("LocationHierarchy", fields: [parent_id], references: [location_id])
+  children       Location[]     @relation("LocationHierarchy")
+  user_locations UserLocation[]
+
+  @@map("locations")
+}
+
+model UserLocation {
+  id          Int @id @default(autoincrement())
+  user_id     Int
+  location_id Int
+
+  user     User     @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+  location Location @relation(fields: [location_id], references: [location_id], onDelete: Cascade)
+
+  @@unique([user_id, location_id])
+  @@map("user_locations")
+}
+
+// ============================================
+// EDUCATION MODULE
+// ============================================
+
+model Institution {
+  institution_id Int      @id @default(autoincrement())
+  name           String
+  name_bn        String?
+  type           String
+  district       String?
+  upazila        String?
+  address        String?
+  phone          String?
+  email          String?
+  description    String?
+  logo_url       String?
+  is_active      Boolean  @default(true)
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  courses       Course[]
+  students      Student[]
+  announcements InstitutionAnnouncement[]
+
+  @@map("institutions")
+}
+
+model Course {
+  course_id      Int      @id @default(autoincrement())
+  institution_id Int
+  name           String
+  name_bn        String?
+  description    String?
+  duration       String?
+  fee            Decimal?
+  is_active      Boolean  @default(true)
+  created_at     DateTime @default(now())
+
+  institution Institution     @relation(fields: [institution_id], references: [institution_id])
+  teachers    CourseTeacher[]
+  students    Student[]
+
+  @@map("courses")
+}
+
+model CourseTeacher {
+  id         Int      @id @default(autoincrement())
+  course_id  Int
+  user_id    Int
+  created_at DateTime @default(now())
+
+  course Course @relation(fields: [course_id], references: [course_id])
+  user   User   @relation(fields: [user_id], references: [user_id])
+
+  @@unique([course_id, user_id])
+  @@map("course_teachers")
+}
+
+model Student {
+  student_id      Int      @id @default(autoincrement())
+  user_id         Int      @unique
+  institution_id  Int
+  enrollment_date DateTime @default(now())
+  status          String   @default("ACTIVE")
+  created_at      DateTime @default(now())
+
+  user        User        @relation(fields: [user_id], references: [user_id])
+  institution Institution @relation(fields: [institution_id], references: [institution_id])
+  courses     Course[]
+
+  @@map("students")
+}
+
+model InstitutionAnnouncement {
+  announcement_id Int      @id @default(autoincrement())
+  institution_id  Int
+  title           String
+  content         String
+  priority        String   @default("NORMAL")
+  is_active       Boolean  @default(true)
+  created_at      DateTime @default(now())
+
+  institution Institution @relation(fields: [institution_id], references: [institution_id])
+
+  @@map("institution_announcements")
+}
+
+// ============================================
+// NGO & SOCIAL SUPPORT MODULE
+// ============================================
+
+model Organisation {
+  organisation_id Int      @id @default(autoincrement())
+  name            String
+  name_bn         String?
+  type            String
+  description     String?
+  website         String?
+  email           String?
+  phone           String?
+  address         String?
+  district        String?
+  logo_url        String?
+  is_verified     Boolean  @default(false)
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  members    OrganisationMember[]
+  programmes NgoProgramme[]
+  donations  Donation[]
+
+  @@map("organisations")
+}
+
+model OrganisationMember {
+  id              Int      @id @default(autoincrement())
+  organisation_id Int
+  user_id         Int
+  role            String   @default("MEMBER")
+  created_at      DateTime @default(now())
+
+  organisation Organisation @relation(fields: [organisation_id], references: [organisation_id])
+  user         User         @relation(fields: [user_id], references: [user_id])
+
+  @@unique([organisation_id, user_id])
+  @@map("organisation_members")
+}
+
+model NgoProgramme {
+  programme_id    Int       @id @default(autoincrement())
+  organisation_id Int
+  name            String
+  description     String?
+  type            String
+  start_date      DateTime?
+  end_date        DateTime?
+  status          String    @default("ACTIVE")
+  budget          Decimal?
+  beneficiaries   Int?
+  created_at      DateTime  @default(now())
+
+  organisation Organisation         @relation(fields: [organisation_id], references: [organisation_id])
+  enrolments   ProgrammeEnrolment[]
+
+  @@map("ngo_programmes")
+}
+
+model ProgrammeEnrolment {
+  id           Int      @id @default(autoincrement())
+  programme_id Int
+  user_id      Int
+  status       String   @default("ACTIVE")
+  enrolled_at  DateTime @default(now())
+
+  programme NgoProgramme @relation(fields: [programme_id], references: [programme_id])
+  user      User         @relation(fields: [user_id], references: [user_id])
+
+  @@unique([programme_id, user_id])
+  @@map("programme_enrolments")
+}
+
+model Donation {
+  donation_id     Int      @id @default(autoincrement())
+  organisation_id Int
+  donor_name      String?
+  amount          Decimal
+  currency        String   @default("BDT")
+  purpose         String?
+  status          String   @default("RECEIVED")
+  created_at      DateTime @default(now())
+
+  organisation Organisation @relation(fields: [organisation_id], references: [organisation_id])
+
+  @@map("donations")
+}
+
+// ============================================
+// AGRICULTURE ENHANCEMENTS
+// ============================================
+
+model SoilTestRequest {
+  request_id    Int      @id @default(autoincrement())
+  user_id       Int
+  plot_size     String
+  address       String
+  intended_crop String?
+  crop_history  String?
+  status        String   @default("SUBMITTED")
+  result        String?
+  officer_id    Int?
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  user    User? @relation("SoilTestRequester", fields: [user_id], references: [user_id])
+  officer User? @relation("SoilTestOfficer", fields: [officer_id], references: [user_id])
+
+  @@map("soil_test_requests")
+}
+
+model Seed {
+  seed_id      Int      @id @default(autoincrement())
+  name         String
+  name_bn      String?
+  variety      String?
+  crop_id      Int?
+  season       String?
+  price        Decimal?
+  quantity     String?
+  supplier     String?
+  district     String?
+  is_available Boolean  @default(true)
+  created_at   DateTime @default(now())
+
+  crop Crop? @relation(fields: [crop_id], references: [crop_id])
+
+  @@map("seeds")
+}
+
+model Fertilizer {
+  fertilizer_id Int      @id @default(autoincrement())
+  name          String
+  name_bn       String?
+  type          String?
+  price         Decimal?
+  unit          String?
+  is_subsidized Boolean  @default(false)
+  created_at    DateTime @default(now())
+
+  @@map("fertilizers")
+}
+
+model Listing {
+  listing_id  Int      @id @default(autoincrement())
+  user_id     Int
+  title       String
+  description String?
+  type        String   // BUY, SELL, RENT
+  category    String   // CROP, LIVESTOCK, EQUIPMENT, LAND, VEHICLE, HOUSEHOLD, OTHER
+  price       Decimal?
+  price_type  String?  // FIXED, NEGOTIABLE, PER_DAY, PER_MONTH
+  image_url   String?
+  location    String?
+  district    String?
+  is_active   Boolean  @default(true)
+  phone       String?
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  user User @relation(fields: [user_id], references: [user_id])
+
+  @@map("listings")
+}
+
+model PriceAlert {
+  alert_id     Int      @id @default(autoincrement())
+  user_id      Int
+  commodity    String   // e.g. "Beef", "Potato", "Boro-Fine"
+  threshold_pct Float   @default(5) // alert when price changes by this %
+  is_active    Boolean  @default(true)
+  last_notified_at DateTime?
+  created_at   DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [user_id])
+
+  @@unique([user_id, commodity])
+  @@map("price_alerts")
+}
+
+model PriceAlertLog {
+  log_id       Int      @id @default(autoincrement())
+  user_id      Int
+  commodity    String
+  old_price    Float
+  new_price    Float
+  change_pct   Float
+  message      String
+  is_read      Boolean  @default(false)
+  created_at   DateTime @default(now())
+
+  user User @relation(fields: [user_id], references: [user_id])
+
+  @@map("price_alert_logs")
 }
 
 // ============================================

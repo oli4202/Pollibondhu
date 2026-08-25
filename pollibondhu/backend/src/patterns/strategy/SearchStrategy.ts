@@ -33,12 +33,12 @@ export class ServiceSearchStrategy implements SearchStrategy<any> {
 
     const where: any = { status: 'APPROVED', is_available: true };
     if (query) where.OR = [
-      { title: { contains: query, mode: 'insensitive' } },
-      { description: { contains: query, mode: 'insensitive' } },
+      { title: { contains: query } },
+      { description: { contains: query } },
     ];
-    if (location) where.district = { contains: location, mode: 'insensitive' };
+    if (location) where.district = { contains: location };
     if (status) where.status = status;
-    if (category) where.category = { name: { equals: category, mode: 'insensitive' } };
+    if (category) where.category = { name: { equals: category } };
 
     const [data, total] = await Promise.all([
       prisma.service.findMany({
@@ -62,10 +62,10 @@ export class CropSearchStrategy implements SearchStrategy<any> {
 
     const where: any = {};
     if (query) where.OR = [
-      { name: { contains: query, mode: 'insensitive' } },
-      { name_bn: { contains: query, mode: 'insensitive' } },
+      { name: { contains: query } },
+      { name_bn: { contains: query } },
     ];
-    if (category) where.season = { equals: category, mode: 'insensitive' };
+    if (category) where.season = { equals: category };
 
     const [data, total] = await Promise.all([
       prisma.crop.findMany({ where, skip, take: limit, include: { category: true } }),
@@ -82,8 +82,8 @@ export class ExpertSearchStrategy implements SearchStrategy<any> {
     const skip = (page - 1) * limit;
 
     const where: any = { is_verified: true };
-    if (query) where.specialization = { contains: query, mode: 'insensitive' };
-    if (location) where.user = { district: { contains: location, mode: 'insensitive' } };
+    if (query) where.specialization = { contains: query };
+    if (location) where.user = { district: { contains: location } };
 
     const [data, total] = await Promise.all([
       prisma.expert.findMany({

@@ -1,60 +1,203 @@
 import { useAuth } from '@/contexts/AuthContext';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Link } from 'react-router-dom';
+import { Card, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { Wrench, TrendingUp, Eye, Bookmark } from 'lucide-react';
-import { useState } from 'react';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { Wrench, Plus, Eye, Clock, TrendingUp, ArrowRight, Building2, FileText, Users } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import api from '@/utils/api';
+
+interface Service {
+  service_id: number;
+  title: string;
+  status: string;
+  price?: number;
+  is_available: boolean;
+  created_at: string;
+}
+
+const govServiceTypes = [
+  { name: 'NID Application', emoji: '🪪', desc: 'National Identity Card' },
+  { name: 'Birth Registration', emoji: '👶', desc: 'Birth certificate registration' },
+  { name: 'NID Correction', emoji: '✏️', desc: 'Correct NID information' },
+  { name: 'NID Duplicate', emoji: '📋', desc: 'Duplicate NID card' },
+  { name: 'Death Certificate', emoji: '📄', desc: 'Death certificate' },
+  { name: 'Marriage Registration', emoji: '💍', desc: 'Marriage certificate' },
+  { name: 'Trade License', emoji: '🏬', desc: 'Business trade license' },
+  { name: 'Land Khatian', emoji: '📜', desc: 'Land records & khatian' },
+  { name: 'Income Certificate', emoji: '💰', desc: 'Income certificate' },
+  { name: 'Character Certificate', emoji: '🎖️', desc: 'Character certificate' },
+];
 
 export default function ProviderDashboard() {
   const { user } = useAuth();
-  const [services] = useState([
-    { id: 1, title: 'Power Tiller Rental', status: 'APPROVED', views: 245, saves: 18, price: 500 },
-    { id: 2, title: 'Seed Supply - BRRI Dhan28', status: 'APPROVED', views: 189, saves: 12, price: 85 },
-    { id: 3, title: 'Land Survey Service', status: 'PENDING', views: 0, saves: 0, price: 1500 },
-  ]);
+  const [services, setServices] = useState<Service[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const isGovProvider = user?.role === 'GOV_SERVICE_PROVIDER' || user?.roles?.includes('GOV_SERVICE_PROVIDER');
+
+  useEffect(() => {
+    api.get('/services', { params: { provider_id: user?.user_id } })
+      .then(res => {
+        const data = res.data;
+        setServices(data.data?.services || data.services || (Array.isArray(data.data) ? data.data : []) || []);
+      })
+      .catch(() => setServices([]))
+      .finally(() => setLoading(false));
+  }, [user?.user_id]);
+
+  const stats = {
+    total: services.length,
+    approved: services.filter(s => s.status === 'APPROVED').length,
+    pending: services.filter(s => s.status === 'PENDING').length,
+    unavailable: services.filter(s => !s.is_available).length,
+  };
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl bg-gradient-to-r from-purple-600 to-purple-800 text-white p-6 md:p-8">
-        <p className="text-purple-100 text-sm font-medium">Provider Portal</p>
-        <h1 className="text-2xl md:text-3xl font-bold mt-1">{user?.full_name}</h1>
-        <p className="text-purple-200 text-sm mt-1">Manage your services and track performance</p>
+      {/* Welcome Banner */}
+      <div className={`rounded-2xl bg-gradient-to-r ${isGovProvider ? 'from-blue-600 via-blue-700 to-indigo-700' : 'from-purple-600 via-purple-700 to-indigo-700'} text-white p-6 md:p-8`}>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className={`${isGovProvider ? 'text-blue-100' : 'text-purple-100'} text-sm font-medium`}>
+              {isGovProvider ? '🏛️ Government Service Portal' : 'Provider Portal'}
+            </p>
+            <h1 className="text-2xl md:text-3xl font-bold mt-1">Welcome, {user?.full_name}</h1>
+            <p className={`${isGovProvider ? 'text-blue-200' : 'text-purple-200'} text-sm mt-1`}>
+              {isGovProvider ? 'Manage government services for citizens — NID, birth cert, trade license & more' : 'Manage your services and grow your business'}
+            </p>
+          </div>
+          <Link to="/provider/services">
+            <Button className="bg-white/20 hover:bg-white/30 text-white border-white/30">
+              <Plus size={16} /> {isGovProvider ? 'New Gov Service' : 'New Service'}
+            </Button>
+          </Link>
+        </div>
       </div>
 
-      <div className="grid sm:grid-cols-3 gap-4">
-        {[{ label: 'Total Services', value: '3', icon: Wrench }, { label: 'Total Views', value: '434', icon: Eye }, { label: 'Saved by Users', value: '30', icon: Bookmark }].map((s) => (
-          <Card key={s.label}>
+      {/* Stats Grid */}
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {[
+          { label: 'Total Services', value: stats.total, icon: Wrench, color: 'bg-purple-50 text-purple-600' },
+          { label: 'Approved & Live', value: stats.approved, icon: Eye, color: 'bg-green-50 text-green-600' },
+          { label: 'Pending Review', value: stats.pending, icon: Clock, color: 'bg-amber-50 text-amber-600' },
+          { label: 'Active Rate', value: stats.approved > 0 ? `${Math.round((stats.approved / stats.total) * 100)}%` : '—', icon: TrendingUp, color: 'bg-blue-50 text-blue-600' },
+        ].map((s) => (
+          <Card key={s.label} className="hover:shadow-md transition-shadow">
             <CardContent className="p-5 flex items-center justify-between">
-              <div><p className="text-sm text-earth-500 font-medium">{s.label}</p><p className="text-2xl font-bold text-earth-900 mt-1">{s.value}</p></div>
-              <div className="p-3 rounded-lg bg-purple-50 text-purple-600"><s.icon size={20} /></div>
+              <div>
+                <p className="text-sm text-earth-500 font-medium">{s.label}</p>
+                <p className="text-2xl font-bold text-earth-900 mt-1">{s.value}</p>
+              </div>
+              <div className={`p-3 rounded-xl ${s.color}`}>
+                <s.icon size={20} />
+              </div>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold text-earth-800">My Services</h2>
-        <Button>Add New Service</Button>
-      </div>
-
-      <div className="space-y-3">
-        {services.map((s) => (
-          <Card key={s.id}>
-            <CardContent className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className="font-semibold text-earth-800">{s.title}</h3>
-                  <Badge variant={s.status === 'APPROVED' ? 'success' : 'warning'}>{s.status}</Badge>
+      {/* Government Service Types (for Gov Providers) */}
+      {isGovProvider && (
+        <Card>
+          <CardContent className="p-5">
+            <h3 className="font-semibold text-earth-800 mb-3 flex items-center gap-2">
+              <Building2 size={18} className="text-blue-600" /> Government Service Types
+            </h3>
+            <p className="text-xs text-earth-500 mb-4">These are the government services you can offer to citizens. Click "New Gov Service" to create one.</p>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {govServiceTypes.map(s => (
+                <div key={s.name} className="flex items-center gap-3 rounded-lg border border-earth-100 p-3 hover:bg-blue-50 transition-colors">
+                  <span className="text-xl">{s.emoji}</span>
+                  <div>
+                    <p className="text-sm font-medium text-earth-800">{s.name}</p>
+                    <p className="text-[10px] text-earth-400">{s.desc}</p>
+                  </div>
                 </div>
-                <p className="text-sm text-earth-500">৳{s.price} • {s.views} views • {s.saves} saves</p>
-              </div>
-              <div className="flex gap-2">
-                <Button size="sm" variant="outline">Edit</Button>
-                <Button size="sm" variant="outline" className="text-red-600 border-red-200 hover:bg-red-50">Delete</Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Quick Actions */}
+      <div className="grid md:grid-cols-2 gap-4">
+        <Card className="hover:shadow-md transition-shadow">
+          <CardContent className="p-5">
+            <h3 className="font-semibold text-earth-800 mb-2">📋 {isGovProvider ? 'Add Government Service' : 'Create a New Service'}</h3>
+            <p className="text-sm text-earth-500 mb-4">
+              {isGovProvider ? 'List a new government service so citizens can find and apply for it.' : 'List your services so citizens can find and request them.'}
+            </p>
+            <Link to="/provider/services">
+              <Button size="sm">
+                <Plus size={14} /> Create Service <ArrowRight size={14} />
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+        <Card className="hover:shadow-md transition-shadow">
+          <CardContent className="p-5">
+            <h3 className="font-semibold text-earth-800 mb-2">📨 {isGovProvider ? 'Review Applications' : 'Village Market'}</h3>
+            <p className="text-sm text-earth-500 mb-4">
+              {isGovProvider ? 'Review and process citizen applications for government services.' : 'Sell crops, equipment, or anything directly to your community.'}
+            </p>
+            <Link to={isGovProvider ? '/provider/services' : '/village-market'}>
+              <Button size="sm" variant="outline">
+                {isGovProvider ? 'View Applications' : 'Browse Market'} <ArrowRight size={14} />
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent Services */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-semibold text-earth-800">
+            {isGovProvider ? 'Your Government Services' : 'Recent Services'}
+          </h2>
+          <Link to="/provider/services" className="text-sm text-polli-600 hover:text-polli-700 font-medium">
+            View all →
+          </Link>
+        </div>
+        <div className="space-y-3">
+          {loading ? (
+            [1, 2, 3].map(i => <Skeleton key={i} className="h-20 rounded-xl" />)
+          ) : services.length === 0 ? (
+            <Card>
+              <CardContent className="p-8 text-center">
+                <Wrench size={40} className="mx-auto text-earth-300 mb-3" />
+                <h3 className="font-semibold text-earth-700 mb-1">No services yet</h3>
+                <p className="text-sm text-earth-400 mb-4">
+                  {isGovProvider ? 'Create your first government service to start receiving citizen applications.' : 'Create your first service to start getting requests.'}
+                </p>
+                <Link to="/provider/services">
+                  <Button><Plus size={16} /> {isGovProvider ? 'Create Government Service' : 'Create Your First Service'}</Button>
+                </Link>
+              </CardContent>
+            </Card>
+          ) : (
+            services.slice(0, 5).map(s => (
+              <Card key={s.service_id} className="hover:shadow-md transition-shadow">
+                <CardContent className="p-4 flex items-center justify-between gap-3">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-semibold text-earth-800">{s.title}</h3>
+                      <Badge variant={s.status === 'APPROVED' ? 'success' : s.status === 'PENDING' ? 'warning' : 'danger'}>
+                        {s.status}
+                      </Badge>
+                      {!s.is_available && <Badge variant="danger">Hidden</Badge>}
+                    </div>
+                    <p className="text-xs text-earth-400 mt-1">
+                      {s.price ? `৳${s.price}` : 'Free'} • Added {new Date(s.created_at).toLocaleDateString()}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );

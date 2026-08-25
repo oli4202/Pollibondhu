@@ -23,8 +23,8 @@ export class ComplaintService {
     logger.info(`Admin ${admin_id} updating complaint ${complaint_id} to ${status}`);
     const complaint = await this.repo.update(complaint_id, {
       status: status as any,
-      reviewed_by: admin_id,
-      resolution_notes: notes,
+      reviewer: { connect: { user_id: admin_id } },
+      resolution_notes: notes || undefined,
       resolved_at: status === 'RESOLVED' ? new Date() : undefined,
     });
 

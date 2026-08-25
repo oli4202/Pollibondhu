@@ -1,7 +1,7 @@
-import { AuthService } from '../../src/services/auth.service';
-import { UserRepository } from '../../src/repositories/user.repository';
-import { mockUser } from '../mocks/data.mock';
-import { prismaMock } from '../setup';
+import { AuthService } from '../../../src/services/auth.service';
+import { UserRepository } from '../../../src/repositories/user.repository';
+import { mockUser } from '../../mocks/data.mock';
+import { prismaMock } from '../../setup';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 

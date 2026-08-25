@@ -24,3 +24,26 @@ export async function login(req: Request, res: Response): Promise<void> {
     sendError(res, err.message, 401);
   }
 }
+
+export async function forgotPassword(req: Request, res: Response): Promise<void> {
+  try {
+    const { email } = req.body;
+    if (!email) { sendError(res, 'Email is required', 400); return; }
+    const result = await authService.forgotPassword(email);
+    sendSuccess(res, result, 'Password reset initiated');
+  } catch (err: any) {
+    sendError(res, err.message, 500);
+  }
+}
+
+export async function resetPassword(req: Request, res: Response): Promise<void> {
+  try {
+    const { email, otp, newPassword } = req.body;
+    if (!email || !otp || !newPassword) { sendError(res, 'All fields are required', 400); return; }
+    if (newPassword.length < 6) { sendError(res, 'Password must be at least 6 characters', 400); return; }
+    const result = await authService.resetPassword(email, otp, newPassword);
+    sendSuccess(res, result, 'Password reset successful');
+  } catch (err: any) {
+    sendError(res, err.message, 400);
+  }
+}

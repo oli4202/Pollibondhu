@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Loader2, Briefcase, FileText, CheckSquare, MessageSquare } from 'lucide-react';
 import api from '@/utils/api';
 import InternalMessaging from '@/components/chat/InternalMessaging';

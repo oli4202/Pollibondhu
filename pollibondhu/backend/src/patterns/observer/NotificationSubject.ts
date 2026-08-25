@@ -95,7 +95,7 @@ export class AuditLogObserver implements EventObserver {
           action: event.type,
           entity_type: event.payload.entity_type || 'UNKNOWN',
           entity_id: event.payload.entity_id,
-          details: event.payload,
+          details: JSON.stringify(event.payload),
         },
       });
     }

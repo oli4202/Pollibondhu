@@ -21,13 +21,26 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     try {
-      await login(email, password);
+      const loggedInUser = await login(email, password);
       addToast('Login successful');
-      // redirect to `next` query param if provided
       try {
         const params = new URLSearchParams(location.search);
         const next = params.get('next');
-        navigate(next || '/dashboard');
+        if (next) {
+          navigate(next);
+        } else {
+          const roles = loggedInUser?.roles || [];
+          const role = loggedInUser?.role;
+          if (roles.includes('SUPER_ADMIN') || roles.includes('SUB_ADMIN') || role === 'ADMIN' || role === 'SUPER_ADMIN') {
+            navigate('/admin');
+          } else if (roles.includes('OFFICER') || role === 'OFFICER') {
+            navigate('/officer');
+          } else if (roles.includes('SERVICE_PROVIDER') || roles.includes('PROVIDER') || roles.includes('GOV_SERVICE_PROVIDER') || role === 'PROVIDER' || role === 'SERVICE_PROVIDER' || role === 'GOV_SERVICE_PROVIDER') {
+            navigate('/provider');
+          } else {
+            navigate('/dashboard');
+          }
+        }
       } catch {
         navigate('/dashboard');
       }
@@ -45,49 +58,98 @@ export default function Login() {
   return (
     <div className="mx-auto grid max-w-5xl items-stretch overflow-hidden rounded-3xl border border-white/15 bg-white shadow-2xl lg:grid-cols-[.9fr_1.1fr]">
       <aside className="relative hidden overflow-hidden bg-earth-900 p-10 text-white lg:block">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,rgba(76,169,118,.45),transparent_16rem),radial-gradient(circle_at_90%_80%,rgba(245,190,78,.25),transparent_17rem)]" />
-        <div className="relative flex h-full flex-col"><BrandMark compact /><p className="mt-10 text-sm font-semibold uppercase tracking-[.2em] text-polli-200">Connected village life</p><h1 className="mt-3 text-4xl font-bold leading-tight">আপনার গ্রামের সেবাগুলো, হাতের মুঠোয়।</h1><p className="mt-4 text-sm leading-6 text-earth-200">Agriculture, health, education, emergency help, and your community—one simple place to begin.</p><div className="mt-auto grid grid-cols-3 gap-3 pt-10">{[[Wheat, 'কৃষি'], [HeartPulse, 'স্বাস্থ্য'], [GraduationCap, 'শিক্ষা']].map(([Icon, label]) => { const ServiceIcon = Icon as typeof Wheat; return <div key={label as string} className="rounded-2xl border border-white/15 bg-white/10 p-3 text-center backdrop-blur-sm"><ServiceIcon className="mx-auto text-amber-300" size={22} /><p className="mt-2 text-xs font-medium">{label as string}</p></div>; })}</div></div>
+        {/* Background image */}
+        <img
+          src="https://tse3.mm.bing.net/th/id/OIP.rCXl0qzvWJe4frGftb5VGgHaE6?r=0&rs=1&pid=ImgDetMain&o=7&rm=3"
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 h-full w-full object-cover"
+          referrerPolicy="no-referrer"
+        />
+        {/* Green overlay for readability */}
+        <div className="absolute inset-0 bg-gradient-to-br from-polli-800/85 via-polli-700/80 to-emerald-800/85" />
+        {/* Decorative blurs */}
+        <div className="absolute -top-20 -right-20 w-72 h-72 bg-amber-400/10 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="relative flex h-full flex-col">
+          <BrandMark compact />
+
+          <p className="mt-10 text-sm font-semibold uppercase tracking-[.2em] text-polli-200">Connected village life</p>
+          <h1 className="mt-3 text-4xl font-bold leading-tight">আপনার গ্রামের সেবাগুলো, হাতের মুঠোয়।</h1>
+          <p className="mt-4 text-sm leading-6 text-polli-100/80">Agriculture, health, education, emergency help, and your community — one simple place to begin.</p>
+
+          <div className="mt-auto grid grid-cols-3 gap-3 pt-10">
+            {[[Wheat, 'কৃষি'], [HeartPulse, 'স্বাস্থ্য'], [GraduationCap, 'শিক্ষা']].map(([Icon, label]) => {
+              const ServiceIcon = Icon as typeof Wheat;
+              return (
+                <div key={label as string} className="rounded-2xl border border-white/15 bg-white/10 p-3 text-center backdrop-blur-sm hover:bg-white/15 transition-colors">
+                  <ServiceIcon className="mx-auto text-amber-300" size={22} />
+                  <p className="mt-2 text-xs font-medium">{label as string}</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </aside>
       <div className="p-6 sm:p-10">
-      <Card className="border-0 shadow-none">
-        <CardHeader className="text-center">
-          <div className="mb-5 flex justify-center lg:hidden"><BrandMark /></div>
-          <CardTitle className="text-2xl">Welcome back</CardTitle>
-          <p className="mt-1 text-sm text-earth-500">Sign in to your PolliBondhu account</p>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-earth-700 mb-1">Email</label>
-              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com"
-                className="w-full rounded-xl border border-earth-200 bg-white px-3 py-3 text-sm text-earth-900 placeholder:text-earth-400 focus:outline-none focus:ring-2 focus:ring-polli-500" />
+        <Card className="border-0 shadow-none">
+          <CardHeader className="text-center">
+            <div className="mb-5 flex justify-center lg:hidden"><BrandMark /></div>
+            <CardTitle className="text-2xl">Welcome back</CardTitle>
+            <p className="mt-1 text-sm text-earth-500">Sign in to your PolliBondhu account</p>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-earth-700 mb-1">Email</label>
+                <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com"
+                  className="w-full rounded-xl border border-earth-200 bg-white px-3 py-3 text-sm text-earth-900 placeholder:text-earth-400 focus:outline-none focus:ring-2 focus:ring-polli-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-earth-700 mb-1">Password</label>
+                <div className="relative">
+                  <input type={showPassword ? 'text' : 'password'} required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter your password"
+                    className="w-full rounded-xl border border-earth-200 bg-white px-3 py-3 pr-11 text-sm text-earth-900 placeholder:text-earth-400 focus:outline-none focus:ring-2 focus:ring-polli-500" />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'} className="absolute right-3 top-3 text-earth-500 hover:text-polli-700">
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 text-sm text-earth-600">
+                  <input type="checkbox" className="rounded border-earth-300 text-polli-600 focus:ring-polli-500" />
+                  Remember me
+                </label>
+                <Link to="/forgot-password" className="text-sm font-medium text-polli-600 hover:text-polli-700 hover:underline">
+                  Forgot password?
+                </Link>
+              </div>
+              <Button type="submit" disabled={loading} className="w-full">{loading ? 'Signing in...' : 'Sign In'}</Button>
+            </form>
+            <div className="my-5 flex items-center gap-3 text-xs text-earth-400">
+              <span className="h-px flex-1 bg-earth-200" />
+              or continue with
+              <span className="h-px flex-1 bg-earth-200" />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-earth-700 mb-1">Password</label>
-              <div className="relative"><input type={showPassword ? 'text' : 'password'} required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter your password"
-                className="w-full rounded-xl border border-earth-200 bg-white px-3 py-3 pr-11 text-sm text-earth-900 placeholder:text-earth-400 focus:outline-none focus:ring-2 focus:ring-polli-500" /><button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'} className="absolute right-3 top-3 text-earth-500 hover:text-polli-700">{showPassword ? <EyeOff size={18} /> : <Eye size={18} />}</button></div>
+            <div className="grid grid-cols-2 gap-3">
+              <button type="button" onClick={() => handleSocialLogin('Google')} className="flex items-center justify-center gap-2 rounded-xl border border-earth-200 bg-white px-3 py-3 text-sm font-semibold text-earth-700 transition hover:border-polli-300 hover:bg-polli-50">
+                <GoogleLogo /> Google
+              </button>
+              <button type="button" onClick={() => handleSocialLogin('Facebook')} className="flex items-center justify-center gap-2 rounded-xl border border-earth-200 bg-white px-3 py-3 text-sm font-semibold text-earth-700 transition hover:border-polli-300 hover:bg-polli-50">
+                <FacebookLogo /> Facebook
+              </button>
             </div>
-            <Button type="submit" disabled={loading} className="w-full">{loading ? 'Signing in...' : 'Sign In'}</Button>
-          </form>
-          <div className="my-5 flex items-center gap-3 text-xs text-earth-400"><span className="h-px flex-1 bg-earth-200" />or continue with<span className="h-px flex-1 bg-earth-200" /></div>
-          <div className="grid grid-cols-2 gap-3">
-            <button type="button" onClick={() => handleSocialLogin('Google')} className="flex items-center justify-center gap-2 rounded-xl border border-earth-200 bg-white px-3 py-3 text-sm font-semibold text-earth-700 transition hover:border-polli-300 hover:bg-polli-50">
-              <GoogleLogo /> Google
-            </button>
-            <button type="button" onClick={() => handleSocialLogin('Facebook')} className="flex items-center justify-center gap-2 rounded-xl border border-earth-200 bg-white px-3 py-3 text-sm font-semibold text-earth-700 transition hover:border-polli-300 hover:bg-polli-50">
-              <FacebookLogo /> Facebook
-            </button>
-          </div>
-          <p className="text-sm text-earth-500 text-center mt-4">
-            Don't have an account? <Link to="/register" className="text-polli-700 font-medium hover:underline">Register</Link>
-          </p>
-          <div className="mt-4 p-3 bg-earth-50 rounded-lg text-xs text-earth-500">
-            <p className="font-medium mb-1">Demo accounts:</p>
-            <p>Admin: admin@pollibondhu.test / admin123</p>
-            <p>User: rahim@pollibondhu.test / user123</p>
-          </div>
-        </CardContent>
-      </Card></div>
+            <p className="text-sm text-earth-500 text-center mt-4">
+              Don't have an account? <Link to="/register" className="text-polli-700 font-medium hover:underline">Register</Link>
+            </p>
+            <div className="mt-4 p-3 bg-earth-50 rounded-lg text-xs text-earth-500">
+              <p className="font-medium mb-1">Demo accounts:</p>
+              <p>Admin: admin@pollibondhu.test / admin123</p>
+              <p>User: rahim@pollibondhu.test / user123</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

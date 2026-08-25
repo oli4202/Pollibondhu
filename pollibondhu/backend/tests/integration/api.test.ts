@@ -71,7 +71,7 @@ describe('Integration Tests', () => {
         .get('/api/admin/dashboard')
         .set('Authorization', 'Bearer faketoken');
 
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(401);
     });
   });
 

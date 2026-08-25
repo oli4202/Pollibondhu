@@ -1,10 +1,10 @@
-import { DatabaseManager } from '../../src/patterns/singleton/DatabaseManager';
-import { Logger } from '../../src/patterns/singleton/Logger';
-import { NotificationFactory } from '../../src/patterns/factory/NotificationFactory';
-import { SearchContext, ServiceSearchStrategy, CropSearchStrategy } from '../../src/patterns/strategy/SearchStrategy';
-import { NotificationSubject, UserNotificationObserver, AuditLogObserver } from '../../src/patterns/observer/NotificationSubject';
-import { AdminDashboardFacade } from '../../src/patterns/facade/AdminDashboardFacade';
-import { prismaMock } from '../setup';
+import { DatabaseManager } from '../../../src/patterns/singleton/DatabaseManager';
+import { Logger } from '../../../src/patterns/singleton/Logger';
+import { NotificationFactory } from '../../../src/patterns/factory/NotificationFactory';
+import { SearchContext, ServiceSearchStrategy, CropSearchStrategy } from '../../../src/patterns/strategy/SearchStrategy';
+import { NotificationSubject, UserNotificationObserver, AuditLogObserver } from '../../../src/patterns/observer/NotificationSubject';
+import { AdminDashboardFacade } from '../../../src/patterns/facade/AdminDashboardFacade';
+import { prismaMock } from '../../setup';
 
 describe('Design Patterns', () => {
   describe('Singleton Pattern', () => {

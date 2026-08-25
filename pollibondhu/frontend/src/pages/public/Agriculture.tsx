@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CloudSun, Droplets, Sprout, TrendingDown, TrendingUp, Wind, X, CheckCircle, FileText, ChevronRight, ChevronLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { AlertTriangle, CloudSun, Droplets, MapPin, Sprout, TrendingDown, TrendingUp, Wind, X, CheckCircle, FileText, ChevronRight, ChevronLeft, Sparkles } from 'lucide-react';
 import api from '@/utils/api';
 import { useToast } from '@/components/feedback/ToastProvider';
+import CropSuggestionAI from '@/components/ai/CropSuggestionAI';
+import AiInstantHelp from '@/components/ai/AiInstantHelp';
 
 type Crop = { crop_id: number; name: string; name_bn?: string; season?: string; description: string };
 type Price = { price_id: number; price: string; unit: string; change_pct: number; market_name: string; crop?: { name: string } };
 type Weather = { district: string; temperature: number; condition: string; humidity: number; rainfall: number; uv_index: string };
-const cropEmoji: Record<string, string> = { Potato: '🥔', 'Boro Paddy': '🌾', Mustard: '🌼', 'Aman Paddy': '🌾', Wheat: '🌿' };
+const cropEmoji: Record<string, string> = { Potato: '🥔', 'Boro Paddy': '🌾', Mustard: '🌼', 'Aman Paddy': '🌾', Wheat: '🌿', Jute: '🌿', Maize: '🌽', Lentil: '🫘', Onion: '🧅', Tomato: '🍅', Chili: '🌶️', Sugarcane: '🪴', Mango: '🥭', Banana: '🍌', Groundnut: '🥜', Cauliflower: '🥬', Cabbage: '🥗', Pumpkin: '🎃', Eggplant: '🍆' };
 
 const TABS = [
   { id: 'advisory', label: 'Crop Advisory', emoji: '🌱' },
@@ -17,6 +20,7 @@ const TABS = [
 ];
 
 export default function AgriculturePage() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('advisory');
   const [crops, setCrops] = useState<Crop[]>([]);
   const [prices, setPrices] = useState<Price[]>([]);
@@ -85,6 +89,11 @@ export default function AgriculturePage() {
     </div>
 
     <div className="mt-6">
+      {/* AI Crop Suggestion */}
+      <div className="mt-6">
+        <CropSuggestionAI />
+      </div>
+
       {/* ADVISORY TAB */}
       {activeTab === 'advisory' && (
         <>
@@ -98,10 +107,10 @@ export default function AgriculturePage() {
 
           <section className="rounded-2xl border border-emerald-100 bg-white p-5 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-sm font-bold">Crop Advisory</h2>
+              <h2 className="text-sm font-bold text-earth-900">🌱 Crop Advisory</h2>
               <div className="flex gap-2">
                 {['All crops', 'Rabi', 'Kharif'].map(item => (
-                  <button key={item} onClick={() => setFilter(item)} className={`rounded-lg px-3 py-1.5 text-xs font-bold ${filter === item ? 'bg-emerald-700 text-white' : 'bg-earth-50 text-earth-500 hover:bg-emerald-50'}`}>
+                  <button key={item} onClick={() => setFilter(item)} className={`rounded-full px-4 py-1.5 text-xs font-bold transition-all duration-200 ${filter === item ? 'bg-emerald-700 text-white shadow-md shadow-emerald-200' : 'bg-earth-100 text-earth-500 hover:bg-emerald-50 hover:text-emerald-700'}`}>
                     {item === 'All crops' ? '🌱 ' : item === 'Rabi' ? '❄️ ' : '☔ '}{item}
                   </button>
                 ))}
@@ -109,15 +118,32 @@ export default function AgriculturePage() {
             </div>
             <div className="mt-5 grid gap-4 sm:grid-cols-2 md:grid-cols-3">
               {loading ? <p className="col-span-full py-8 text-center text-sm text-earth-400">Loading crop services…</p> : visibleCrops.map(crop => (
-                <article key={crop.crop_id} className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-4">
-                  <div className="flex items-start justify-between">
-                    <span className="text-3xl">{cropEmoji[crop.name] || '🌱'}</span>
-                    <span className="rounded-full bg-white px-2 py-1 text-[10px] font-bold text-emerald-700">{crop.season || 'Seasonal'}</span>
+                <article
+                  key={crop.crop_id}
+                  onClick={() => navigate(`/crop/${encodeURIComponent(crop.name)}`)}
+                  className="group relative rounded-2xl border border-emerald-100 bg-white p-5 cursor-pointer transition-all duration-300 hover:shadow-xl hover:shadow-emerald-100/50 hover:border-emerald-300 hover:-translate-y-1 overflow-hidden"
+                >
+                  {/* Gradient overlay on hover */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/0 via-emerald-50/0 to-emerald-100/0 group-hover:from-emerald-50/40 group-hover:via-emerald-50/20 group-hover:to-emerald-100/60 transition-all duration-300 rounded-2xl" />
+                  
+                  <div className="relative z-10">
+                    <div className="flex items-start justify-between">
+                      <span className="text-4xl transition-transform duration-300 group-hover:scale-125 group-hover:rotate-6 drop-shadow-sm">{cropEmoji[crop.name] || '🌱'}</span>
+                      <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold text-emerald-700 group-hover:bg-emerald-200 transition-colors">{crop.season || 'Seasonal'}</span>
+                    </div>
+                    
+                    <h3 className="mt-4 text-base font-bold text-earth-900 group-hover:text-emerald-700 transition-colors">{crop.name}</h3>
+                    <p className="text-xs text-earth-400 mt-0.5">{crop.name_bn}</p>
+                    
+                    <p className="mt-3 min-h-[48px] text-xs leading-5 text-earth-600 line-clamp-2">{crop.description}</p>
+                    
+                    <div className="mt-4 flex items-center justify-between rounded-xl bg-emerald-50 px-3 py-2.5 group-hover:bg-emerald-100 transition-colors">
+                      <span className="text-xs font-bold text-emerald-700">View full advisory</span>
+                      <span className="text-emerald-600 transition-transform duration-300 group-hover:translate-x-1">
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                      </span>
+                    </div>
                   </div>
-                  <h3 className="mt-4 text-sm font-bold">{crop.name}</h3>
-                  <p className="text-xs text-earth-500">{crop.name_bn}</p>
-                  <p className="mt-3 min-h-[52px] text-xs leading-5 text-earth-600 line-clamp-3">{crop.description}</p>
-                  <button onClick={() => setSelectedCrop(crop)} className="mt-4 w-full rounded-lg bg-emerald-700 py-2 text-xs font-bold text-white hover:bg-emerald-800">View full advisory</button>
                 </article>
               ))}
             </div>
@@ -145,8 +171,8 @@ export default function AgriculturePage() {
               </thead>
               <tbody className="divide-y divide-earth-100">
                 {prices.map(price => (
-                  <tr key={price.price_id} className="hover:bg-earth-50/50">
-                    <td className="px-5 py-4 font-semibold text-earth-900">{price.crop?.name || 'Crop'}</td>
+                  <tr key={price.price_id} className="hover:bg-earth-50/50 cursor-pointer" onClick={() => price.crop?.name && navigate(`/commodity/${encodeURIComponent(price.crop.name)}`)}>
+                    <td className="px-5 py-4 font-semibold text-earth-900 hover:text-emerald-700 transition">{price.crop?.name || 'Crop'}</td>
                     <td className="px-5 py-4 text-earth-600">{price.market_name}</td>
                     <td className="px-5 py-4 font-bold">৳{price.price} <span className="text-xs font-normal text-earth-400">/ {price.unit}</span></td>
                     <td className="px-5 py-4">
@@ -420,3 +446,6 @@ export default function AgriculturePage() {
     )}
   </div>;
 }
+
+// AI Instant Help is rendered at the bottom of the page
+// via the PublicLayout component

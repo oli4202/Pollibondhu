@@ -1,8 +1,30 @@
-import Groq from "groq-sdk";
+import { logger } from '../patterns/singleton/Logger';
 
-const groq = new Groq({
-    apiKey: process.env.GROQ_API_KEY,
-});
+/**
+ * Lazy-initialized Groq client.
+ * Only creates the client when first needed, and only if GROQ_API_KEY is set.
+ */
+let groqClient: any = null;
+
+function getGroqClient() {
+  if (groqClient) return groqClient;
+
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) {
+    logger.warn('GROQ_API_KEY not set — AI assistant will return a fallback response');
+    return null;
+  }
+
+  // Dynamic import to avoid crash at module load time
+  try {
+    const Groq = require('groq-sdk').default;
+    groqClient = new Groq({ apiKey });
+    return groqClient;
+  } catch (error) {
+    logger.error('Failed to initialize Groq client:', error);
+    return null;
+  }
+}
 
 export const getAiResponse = async (userRole: string, prompt: string, systemPromptContext?: string) => {
     let baseSystemPrompt = `You are an AI Assistant for PolliBondhu Smart Village. 
@@ -12,6 +34,11 @@ export const getAiResponse = async (userRole: string, prompt: string, systemProm
 
     if (systemPromptContext) {
         baseSystemPrompt += `\nAdditional Context: ${systemPromptContext}`;
+    }
+
+    const groq = getGroqClient();
+    if (!groq) {
+        return `I'm sorry, the AI assistant is currently unavailable. Please try again later or contact support for help with your query: "${prompt.substring(0, 100)}"`;
     }
 
     try {
@@ -26,14 +53,14 @@ export const getAiResponse = async (userRole: string, prompt: string, systemProm
                     content: prompt,
                 },
             ],
-            model: "llama-3.1-8b-instant",
+            model: "groq/compound-mini",
             temperature: 0.5,
             max_tokens: 1024,
         });
 
         return chatCompletion.choices[0]?.message?.content || "";
     } catch (error) {
-        console.error("Groq API Error:", error);
+        logger.error("Groq API Error:", error);
         throw new Error("Failed to get AI response.");
     }
 };
