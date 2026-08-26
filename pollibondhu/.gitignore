@@ -28,9 +28,6 @@ logs/
 .env.local
 .env.*.local
 
-# Freebuff folder
-.freebuff/
-
 # OS files
 .DS_Store
 Thumbs.db
