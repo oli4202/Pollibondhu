@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Permission } from '@/types';
@@ -8,68 +9,58 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import AdminLayout from '@/components/layout/AdminLayout';
 import OfficerLayout from '@/components/layout/OfficerLayout';
 
-// Public Pages
-import Home from '@/pages/public/Home';
-import AgriculturePage from '@/pages/public/Agriculture';
-import ServicesPage from '@/pages/public/Services';
-import CommunityPage from '@/pages/public/Community';
-import Marketplace from '@/pages/public/Marketplace';
-import HealthcarePage from '@/pages/public/Healthcare';
-import EducationPage from '@/pages/public/Education';
-import EmergencyPage from '@/pages/public/Emergency';
-import NewsPage from '@/pages/public/News';
-import NGOsPage from '@/pages/public/NGOs';
-import PrivacyPolicy from '@/pages/public/PrivacyPolicy';
-import TermsOfUse from '@/pages/public/TermsOfUse';
-import AccessibilityPage from '@/pages/public/Accessibility';
-import RTI from '@/pages/public/RTI';
-import HelpCenter from '@/pages/public/HelpCenter';
-import ContactUs from '@/pages/public/ContactUs';
-import ReportIssue from '@/pages/public/ReportIssue';
-import Feedback from '@/pages/public/Feedback';
-import LandRecords from '@/pages/public/LandRecords';
-import NIDServices from '@/pages/public/NIDServices';
-import CommodityDetail from '@/pages/public/CommodityDetail';
-import VillageMarket from '@/pages/public/VillageMarket';
-import CropDetail from '@/pages/public/CropDetail';
-import GovServiceDetail from '@/pages/public/GovServiceDetail';
-import HealthcareDetail from '@/pages/public/HealthcareDetail';
-
-// Auth Pages
-import Login from '@/pages/auth/Login';
-import Register from '@/pages/auth/Register';
-import ForgotPassword from '@/pages/auth/ForgotPassword';
-
-// Citizen Pages
-import UserDashboard from '@/pages/user/Dashboard';
-import ProfilePage from '@/pages/user/Profile';
-import MyApplications from '@/pages/user/MyApplications';
-import MyComplaints from '@/pages/user/MyComplaints';
-import MyMessages from '@/pages/user/MyMessages';
-import MyNotifications from '@/pages/user/MyNotifications';
-
-// Provider Pages
-import ProviderDashboard from '@/pages/provider/ProviderDashboard';
-import ProviderServices from '@/pages/provider/ProviderServices';
-import ProviderMessages from '@/pages/provider/ProviderMessages';
-import ProviderComplaints from '@/pages/provider/ProviderComplaints';
-
-// Officer Pages
-import OfficerDashboardPage from '@/pages/officer/OfficerDashboard';
-import OfficerApplications from '@/pages/officer/OfficerApplications';
-import OfficerComplaints from '@/pages/officer/OfficerComplaints';
-import OfficerMessages from '@/pages/officer/OfficerMessages';
-
-// Admin Pages
-import RoleBasedDashboard from '@/components/layout/RoleBasedDashboard';
-import UserManagement from '@/pages/admin/UserManagement';
-import ServiceManagement from '@/pages/admin/ServiceManagement';
-import ComplaintResolution from '@/pages/admin/ComplaintResolution';
-import DepartmentManagement from '@/pages/admin/DepartmentManagement';
-import ProjectManagement from '@/pages/admin/ProjectManagement';
-import BudgetManagement from '@/pages/admin/BudgetManagement';
-import AuditLogs from '@/pages/admin/AuditLogs';
-import EndpointViewer from '@/pages/admin/EndpointViewer';
+// Route pages are loaded on demand to keep the initial application bundle small.
+const Home = lazy(() => import('@/pages/public/Home'));
+const AgriculturePage = lazy(() => import('@/pages/public/Agriculture'));
+const ServicesPage = lazy(() => import('@/pages/public/Services'));
+const CommunityPage = lazy(() => import('@/pages/public/Community'));
+const Marketplace = lazy(() => import('@/pages/public/Marketplace'));
+const HealthcarePage = lazy(() => import('@/pages/public/Healthcare'));
+const EducationPage = lazy(() => import('@/pages/public/Education'));
+const EmergencyPage = lazy(() => import('@/pages/public/Emergency'));
+const NewsPage = lazy(() => import('@/pages/public/News'));
+const NGOsPage = lazy(() => import('@/pages/public/NGOs'));
+const PrivacyPolicy = lazy(() => import('@/pages/public/PrivacyPolicy'));
+const TermsOfUse = lazy(() => import('@/pages/public/TermsOfUse'));
+const AccessibilityPage = lazy(() => import('@/pages/public/Accessibility'));
+const RTI = lazy(() => import('@/pages/public/RTI'));
+const HelpCenter = lazy(() => import('@/pages/public/HelpCenter'));
+const ContactUs = lazy(() => import('@/pages/public/ContactUs'));
+const ReportIssue = lazy(() => import('@/pages/public/ReportIssue'));
+const Feedback = lazy(() => import('@/pages/public/Feedback'));
+const LandRecords = lazy(() => import('@/pages/public/LandRecords'));
+const NIDServices = lazy(() => import('@/pages/public/NIDServices'));
+const CommodityDetail = lazy(() => import('@/pages/public/CommodityDetail'));
+const VillageMarket = lazy(() => import('@/pages/public/VillageMarket'));
+const CropDetail = lazy(() => import('@/pages/public/CropDetail'));
+const GovServiceDetail = lazy(() => import('@/pages/public/GovServiceDetail'));
+const HealthcareDetail = lazy(() => import('@/pages/public/HealthcareDetail'));
+const Login = lazy(() => import('@/pages/auth/Login'));
+const Register = lazy(() => import('@/pages/auth/Register'));
+const ForgotPassword = lazy(() => import('@/pages/auth/ForgotPassword'));
+const UserDashboard = lazy(() => import('@/pages/user/Dashboard'));
+const ProfilePage = lazy(() => import('@/pages/user/Profile'));
+const MyApplications = lazy(() => import('@/pages/user/MyApplications'));
+const MyComplaints = lazy(() => import('@/pages/user/MyComplaints'));
+const MyMessages = lazy(() => import('@/pages/user/MyMessages'));
+const MyNotifications = lazy(() => import('@/pages/user/MyNotifications'));
+const ProviderDashboard = lazy(() => import('@/pages/provider/ProviderDashboard'));
+const ProviderServices = lazy(() => import('@/pages/provider/ProviderServices'));
+const ProviderMessages = lazy(() => import('@/pages/provider/ProviderMessages'));
+const ProviderComplaints = lazy(() => import('@/pages/provider/ProviderComplaints'));
+const OfficerDashboardPage = lazy(() => import('@/pages/officer/OfficerDashboard'));
+const OfficerApplications = lazy(() => import('@/pages/officer/OfficerApplications'));
+const OfficerComplaints = lazy(() => import('@/pages/officer/OfficerComplaints'));
+const OfficerMessages = lazy(() => import('@/pages/officer/OfficerMessages'));
+const RoleBasedDashboard = lazy(() => import('@/components/layout/RoleBasedDashboard'));
+const UserManagement = lazy(() => import('@/pages/admin/UserManagement'));
+const ServiceManagement = lazy(() => import('@/pages/admin/ServiceManagement'));
+const ComplaintResolution = lazy(() => import('@/pages/admin/ComplaintResolution'));
+const DepartmentManagement = lazy(() => import('@/pages/admin/DepartmentManagement'));
+const ProjectManagement = lazy(() => import('@/pages/admin/ProjectManagement'));
+const BudgetManagement = lazy(() => import('@/pages/admin/BudgetManagement'));
+const AuditLogs = lazy(() => import('@/pages/admin/AuditLogs'));
+const EndpointViewer = lazy(() => import('@/pages/admin/EndpointViewer'));
 
 /**
  * Protected route wrapper with permission-based access control.
@@ -120,6 +111,7 @@ function Protected({
 
 export default function AppRoutes() {
   return (
+    <Suspense fallback={<div className="flex h-screen items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-4 border-polli-500 border-t-transparent" /></div>}>
     <Routes>
       {/* ============================================ */}
       {/* PUBLIC ROUTES                                */}
@@ -202,5 +194,6 @@ export default function AppRoutes() {
         <Route path="/admin/endpoints" element={<Protected permission="dashboard.super.view"><EndpointViewer /></Protected>} />
       </Route>
     </Routes>
+    </Suspense>
   );
 }

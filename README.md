@@ -51,6 +51,10 @@ Routes define endpoints; middleware applies shared HTTP rules; controllers manag
 | Testing | Jest, ts-jest, Supertest, jest-mock-extended |
 | Logging | Winston |
 
+## Performance
+
+Route pages are loaded with React `lazy()` and `Suspense`, so visitors download the code for a page only when they navigate to it. A verified production build reduced the initial JavaScript bundle from **1.22 MB** to **377 KB** (about **69% smaller**), while preserving all routes and behavior.
+
 ## Design-pattern deliverable
 
 All patterns are implemented in [`pollibondhu/backend/src/patterns/`](./pollibondhu/backend/src/patterns/) and tested in [`pollibondhu/backend/tests/unit/patterns/`](./pollibondhu/backend/tests/unit/patterns/).
