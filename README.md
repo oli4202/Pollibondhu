@@ -1,290 +1,286 @@
-<div align="center">
+# PolliBondhu — Smart Rural Service Platform
 
-<img src="https://img.shields.io/badge/PolliBondhu-Smart%20Rural%20Platform-2ea44f?style=for-the-badge&logo=leaf&logoColor=white" alt="PolliBondhu"/>
+> **Academic Software Engineering Project** · Metropolitan University · SWE-382
 
-# 🌾 PolliBondhu — পল্লীবন্ধু
+PolliBondhu (পল্লীবন্ধু, *Friend of the Village*) is a full-stack platform for rural communities in Bangladesh. It combines citizen services, agriculture support, local providers, complaints, community activity, notifications, and role-based administration.
 
-### Smart Rural Community & Agricultural Support Platform for Bangladesh
+This root README is the GitHub-facing project overview. The application implementation is in [`pollibondhu/`](./pollibondhu); its detailed technical README is retained unchanged.
 
-[![React](https://img.shields.io/badge/React%2018-61DAFB?style=flat-square&logo=react&logoColor=black)](https://reactjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![Node.js](https://img.shields.io/badge/Node.js-339933?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org/)
-[![Prisma](https://img.shields.io/badge/Prisma-2D3748?style=flat-square&logo=prisma&logoColor=white)](https://prisma.io/)
-[![JWT](https://img.shields.io/badge/JWT-000000?style=flat-square&logo=jsonwebtokens&logoColor=white)](https://jwt.io/)
-[![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docker.com/)
+## Instructor quick review
 
-> 🎓 **University Software Engineering Project** | Metropolitan University | SWE-382
+| Requirement | Evidence |
+| --- | --- |
+| Individual implementation | An independently built PolliBondhu project with its own UI, API, data model, patterns, and tests. |
+| Five design patterns | Singleton, Factory Method, Strategy, Observer, and Facade—documented below with source links and UML. |
+| Automated testing | Jest, ts-jest, Supertest, and mocked Prisma/external dependencies. |
+| Coverage evidence | `npm test` produces a Jest/Istanbul report; current verified values are reported truthfully below. |
 
-</div>
+## Features
 
----
+- JWT authentication, bcrypt password hashing, validation, and database-driven RBAC
+- Public, citizen, officer, provider, and administrator experiences
+- Services, bookings, applications, complaints, notifications, audit logs, and dashboards
+- Community posts, comments, reactions, polls, and real-time messaging
+- Agriculture, education, NGO, emergency, and government-service modules
 
-## 📖 What is PolliBondhu?
+## Architecture
 
-**PolliBondhu** (পল্লীবন্ধু, meaning *"Friend of the Village"*) is a **production-quality digital platform** that bridges the digital divide for rural communities in Bangladesh. It connects farmers, citizens, and service providers with:
+```mermaid
+flowchart LR
+  UI[React + TypeScript + Vite] --> API[Express REST API]
+  UI <--> WS[Socket.IO]
+  API --> MW[Auth · RBAC · Validation · Error middleware]
+  MW --> C[Controllers]
+  C --> S[Services and patterns]
+  S --> R[Repositories]
+  R --> P[Prisma ORM]
+  P --> DB[(PostgreSQL / SQLite)]
+  S --> E[Notifications and audit events]
+```
 
-- 🌱 **Agriculture Advisory** — crop guidance, market prices, weather forecasts, subsidies
-- 🏛️ **Citizen Services** — NID, birth certificates, land records, health cards, scholarships
-- 🤝 **Community Forums** — knowledge sharing, polls, discussions
-- 🚨 **Emergency Contacts** — quick access to local emergency services
-- 🛠️ **Local Service Providers** — equipment rental, health camps, land surveys
+Routes define endpoints; middleware applies shared HTTP rules; controllers manage request/response work; services contain business logic; repositories isolate data access; and Prisma manages persistence.
 
----
+## Technology stack
 
-## ✨ Key Features
+| Area | Technology |
+| --- | --- |
+| Frontend | React 18, TypeScript, Vite, Tailwind CSS, React Router, TanStack Query |
+| Backend | Node.js, Express, TypeScript, Socket.IO |
+| Data | Prisma ORM with PostgreSQL or SQLite |
+| Security | JWT, bcryptjs, Helmet, CORS, rate limiting, Zod |
+| Testing | Jest, ts-jest, Supertest, jest-mock-extended |
+| Logging | Winston |
 
-| Role | Capabilities |
-|------|-------------|
-| 👤 **Public** | Landing page, agriculture browse, citizen services, emergency directory |
-| 🌾 **User / Farmer** | Secure login, personal dashboard, complaints, polls, certificates |
-| 🏪 **Service Provider** | Provider dashboard, add/manage services, booking management |
-| 🛡️ **Admin** | Full analytics, user management, complaint resolution, audit logs |
+## Design-pattern deliverable
 
----
+All patterns are implemented in [`pollibondhu/backend/src/patterns/`](./pollibondhu/backend/src/patterns/) and tested in [`pollibondhu/backend/tests/unit/patterns/`](./pollibondhu/backend/tests/unit/patterns/).
 
-## 🚀 Tech Stack
+### 1. Singleton — shared database and logger
 
-### Frontend
-- **React 18** + TypeScript + Vite
-- **Tailwind CSS** — custom PolliBondhu design system
-- **React Router v6** — protected routes with RBAC guards
-- **TanStack Query** — smart caching & state management
-- **Recharts** — admin analytics dashboards
-- **React Hook Form** + Zod — type-safe form validation
+**Problem:** Creating a Prisma client per request wastes connections, and independent loggers create inconsistent output.
+
+**Files/classes:** [`DatabaseManager`](./pollibondhu/backend/src/patterns/singleton/DatabaseManager.ts) and [`Logger`](./pollibondhu/backend/src/patterns/singleton/Logger.ts). They provide one shared Prisma client and one shared Winston logger to application modules.
+
+```mermaid
+classDiagram
+  class DatabaseManager {
+    -static instance: PrismaClient
+    -DatabaseManager()
+    +getInstance() PrismaClient
+    +disconnect() Promise~void~
+  }
+  class Logger {
+    -static instance: Logger
+    -Logger()
+    +getInstance() Logger
+  }
+  class ApplicationModules
+  ApplicationModules --> DatabaseManager : requests shared client
+  ApplicationModules --> Logger : uses shared logger
+```
+
+Private constructors prevent direct construction. Static `getInstance()` methods lazily create then reuse each shared object.
+
+### 2. Factory Method — notification creation
+
+**Problem:** Creating in-app, email, and system notifications in every service would duplicate channel-specific conditional logic.
+
+**Files/classes:** [`NotificationFactory`](./pollibondhu/backend/src/patterns/factory/NotificationFactory.ts), `Notification`, `InAppNotification`, `EmailNotification`, and `SystemAnnouncement`. The observer workflow uses this factory for service-approval notifications.
+
+```mermaid
+classDiagram
+  class NotificationFactory {
+    +createNotification(type, payload) Notification
+  }
+  class Notification {
+    <<abstract>>
+    +getType() string
+    +getContent() object
+  }
+  class InAppNotification
+  class EmailNotification
+  class SystemAnnouncement
+  Notification <|-- InAppNotification
+  Notification <|-- EmailNotification
+  Notification <|-- SystemAnnouncement
+  NotificationFactory --> Notification : creates
+```
+
+Callers request a type and receive the common `Notification` abstraction, avoiding direct dependencies on concrete notification channels.
+
+### 3. Strategy — pluggable search behavior
+
+**Problem:** Services, crops, and experts require different filters, joins, and sorting. One monolithic search implementation would be hard to extend safely.
+
+**Files/classes:** [`SearchStrategy.ts`](./pollibondhu/backend/src/patterns/strategy/SearchStrategy.ts) defines `SearchStrategy<T>`, `SearchContext`, `ServiceSearchStrategy`, `CropSearchStrategy`, and `ExpertSearchStrategy`. [`service.controller.ts`](./pollibondhu/backend/src/controllers/service.controller.ts) uses the service strategy.
+
+```mermaid
+classDiagram
+  class SearchContext~T~ {
+    -strategy: SearchStrategy~T~
+    +setStrategy(strategy)
+    +execute(criteria, prisma) SearchResult~T~
+  }
+  class SearchStrategy~T~ {
+    <<interface>>
+    +search(criteria, prisma) SearchResult~T~
+  }
+  class ServiceSearchStrategy
+  class CropSearchStrategy
+  class ExpertSearchStrategy
+  SearchContext --> SearchStrategy : delegates to
+  SearchStrategy <|.. ServiceSearchStrategy
+  SearchStrategy <|.. CropSearchStrategy
+  SearchStrategy <|.. ExpertSearchStrategy
+```
+
+The context can switch search behavior without changing callers; each strategy owns query rules for just one entity type.
+
+### 4. Observer — event-driven notifications and auditing
+
+**Problem:** A service approval, complaint resolution, or community event can trigger several independent side effects. Coupling services directly to every side effect makes change risky.
+
+**Files/classes:** [`NotificationSubject.ts`](./pollibondhu/backend/src/patterns/observer/NotificationSubject.ts), `UserNotificationObserver`, and `AuditLogObserver`. Events are emitted from [`service.service.ts`](./pollibondhu/backend/src/services/service.service.ts), [`complaint.service.ts`](./pollibondhu/backend/src/services/complaint.service.ts), and [`application.service.ts`](./pollibondhu/backend/src/services/application.service.ts).
+
+```mermaid
+classDiagram
+  class NotificationSubject {
+    -observers: EventObserver[]
+    +attach(observer)
+    +detach(observer)
+    +notify(event, prisma)
+  }
+  class EventObserver {
+    <<interface>>
+    +update(event, prisma)
+  }
+  class UserNotificationObserver
+  class AuditLogObserver
+  class ApplicationService
+  class ComplaintService
+  class ServiceService
+  EventObserver <|.. UserNotificationObserver
+  EventObserver <|.. AuditLogObserver
+  NotificationSubject o--> EventObserver
+  ApplicationService --> NotificationSubject : emits event
+  ComplaintService --> NotificationSubject : emits event
+  ServiceService --> NotificationSubject : emits event
+```
+
+The subject broadcasts an event to attached observers. A later observer, such as an SMS sender, can be added without editing existing business services.
+
+### 5. Facade — administrative dashboard aggregation
+
+**Problem:** The administrator dashboard needs users, services, posts, complaints, and audit records. Controllers should not coordinate every query themselves.
+
+**Files/classes:** [`AdminDashboardFacade`](./pollibondhu/backend/src/patterns/facade/AdminDashboardFacade.ts) provides dashboard statistics, weekly statistics, and growth metrics. [`admin.service.ts`](./pollibondhu/backend/src/services/admin.service.ts) delegates dashboard work to it.
+
+```mermaid
+classDiagram
+  class AdminService
+  class AdminDashboardFacade {
+    +getDashboardStats() DashboardStats
+    +getWeeklyStats() object
+    +getGrowthMetrics(days) object[]
+  }
+  class PrismaClient
+  class UserTable
+  class ServiceTable
+  class ComplaintTable
+  class ForumPostTable
+  class AuditLogTable
+  AdminService --> AdminDashboardFacade
+  AdminDashboardFacade --> PrismaClient
+  PrismaClient --> UserTable
+  PrismaClient --> ServiceTable
+  PrismaClient --> ComplaintTable
+  PrismaClient --> ForumPostTable
+  PrismaClient --> AuditLogTable
+```
+
+The facade gives the rest of the application a small dashboard API while hiding multi-table aggregation.
+
+## Testing and quality assurance
+
+### Approach
+
+- **Framework:** Jest with `ts-jest`; API integration tests use Supertest.
+- **Isolation:** [`tests/setup.ts`](./pollibondhu/backend/tests/setup.ts) swaps the database singleton for a `jest-mock-extended` Prisma mock. Unit tests mock hashing, JWT, and logger dependencies where needed.
+- **Coverage:** Jest collects coverage from backend TypeScript source and writes the report to `pollibondhu/backend/coverage/`.
+- **Scope:** Tests cover patterns, services, repositories, utilities, middleware, controllers, and integration paths.
+
+### Verified test run
+
+```bash
+cd pollibondhu/backend
+npm test -- --runInBand
+```
+
+| Result | Verified status |
+| --- | --- |
+| Test suites | 19 passed / 19 total |
+| Tests | 140 passed / 140 total |
+| Pattern files (line coverage) | 100% for all five pattern implementations |
+| Whole-backend line coverage | 38.59% |
+| Whole-backend branch coverage | 22.51% |
+
+> **Course target: ≥80% line and branch coverage for backend logic.** The suite is passing, but that overall target has not yet been reached: several controllers, routes, and services need additional focused tests. The current global Jest threshold is 50% in [`jest.config.js`](./pollibondhu/backend/jest.config.js), and the measured run is below it. This is stated explicitly rather than presenting an unsupported coverage claim.
+
+## Project structure
+
+```text
+Pollibondhu/
+├── README.md                         # GitHub-facing overview (this file)
+├── docs/                             # Supporting documentation
+└── pollibondhu/
+    ├── README.md                     # Detailed technical notes (retained)
+    ├── backend/
+    │   ├── src/patterns/             # Five documented patterns
+    │   ├── src/controllers/          # HTTP handlers
+    │   ├── src/services/             # Business logic
+    │   ├── src/repositories/         # Data access abstractions
+    │   ├── prisma/                   # Schema and seed data
+    │   └── tests/                    # Unit, pattern, and integration tests
+    └── frontend/src/                 # React UI, contexts, pages, routes
+```
+
+## Local setup
+
+### Prerequisites
+
+- Node.js 18+
+- npm
+- PostgreSQL, or a configured SQLite development database
 
 ### Backend
-- **Node.js** + Express + TypeScript
-- **Prisma ORM** + PostgreSQL / SQLite
-- **JWT Authentication** — access (15min) + refresh (7 days) tokens
-- **bcryptjs** — 12-round password hashing
-- **Winston** — structured logging
-- **Helmet** + CORS + Rate Limiting — security hardening
-
-### Testing
-- **Jest** + Supertest — unit & integration tests
-- **jest-mock-extended** — Prisma mocking
-- **@faker-js/faker** — realistic Bangladesh demo data
-- ✅ **70%+ line/branch coverage achieved**
-
----
-
-## 🏗️ System Architecture
-
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   React     │────▶│   Axios /   │────▶│   Express   │
-│  Frontend   │◀────│ TanStack Q  │◀────│   REST API  │
-│  (Vite)     │     │             │     │  (Node.js)  │
-└─────────────┘     └─────────────┘     └──────┬──────┘
-                                                │
-                    ┌───────────────────────────┘
-                    ▼
-           ┌─────────────────┐
-           │   Middleware    │  Auth · RBAC · Validation
-           └────────┬────────┘
-                    ▼
-           ┌─────────────────┐
-           │   Controllers   │  Thin HTTP layer
-           └────────┬────────┘
-                    ▼
-           ┌─────────────────┐
-           │    Services     │  Business logic + Design Patterns
-           └────────┬────────┘
-                    ▼
-           ┌─────────────────┐
-           │  Repositories   │  Prisma ORM abstraction
-           └────────┬────────┘
-                    ▼
-           ┌─────────────────┐
-           │   PostgreSQL    │
-           └─────────────────┘
-```
-
----
-
-## 🎨 Design Patterns Implemented
-
-This project demonstrates **5 professional software design patterns**:
-
-| # | Pattern | Where Used |
-|---|---------|-----------|
-| 1 | 🔷 **Singleton** | `DatabaseManager` & `Logger` — single PrismaClient & Winston instance |
-| 2 | 🏭 **Factory Method** | `NotificationFactory` — in-app, email & system notifications |
-| 3 | 🎯 **Strategy** | `SearchContext` — pluggable search algorithms (services, crops, experts) |
-| 4 | 👁️ **Observer** | `NotificationSubject` — event-driven user alerts & audit logging |
-| 5 | 🚪 **Facade** | `AdminDashboardFacade` — unified admin stats from 6+ tables |
-
----
-
-## ⚡ Quick Start
-
-### Option 1 — Docker (Recommended)
 
 ```bash
-# Clone the repo
-git clone https://github.com/oli4202/Pollibondhu.git
-cd Pollibondhu/pollibondhu
-
-# Start all services
-docker-compose up --build
-
-# Run migrations and seed (in another terminal)
-docker-compose exec backend npx prisma migrate dev
-docker-compose exec backend npx prisma db seed
-```
-
-🌐 **Frontend:** http://localhost:5173  
-🔌 **Backend API:** http://localhost:4000
-
----
-
-### Option 2 — Manual Setup
-
-```bash
-# Backend
 cd pollibondhu/backend
-cp .env.example .env        # Set your DATABASE_URL and JWT secrets
 npm install
+cp .env.example .env
+npx prisma generate
 npx prisma migrate dev
-npx prisma db seed
-npm run dev                 # Runs on http://localhost:4000
+npm run dev
+```
 
-# Frontend (new terminal)
+### Frontend
+
+```bash
 cd pollibondhu/frontend
 npm install
-npm run dev                 # Runs on http://localhost:5173
+npm run dev
 ```
 
----
+The frontend normally runs on `http://localhost:5173`; the backend API normally runs on `http://localhost:4000`.
 
-## 🔐 Environment Variables
+## Submission checklist
 
-```env
-DATABASE_URL=postgresql://polli:bondhu123@localhost:5432/pollibondhu?schema=public
-JWT_SECRET=pollibondhu-super-secret-key-2026
-JWT_REFRESH_SECRET=pollibondhu-refresh-secret-2026
-PORT=4000
-NODE_ENV=development
-```
+- [x] Five software design patterns implemented and documented with UML
+- [x] Pattern unit tests and API integration tests included
+- [x] Dependency mocking/stubbing used for unit isolation
+- [x] GitHub-facing overview contains architecture, features, setup, and source evidence
+- [ ] Raise backend line and branch coverage to at least 80% before final submission
 
----
+## License
 
-## 🧪 Running Tests
-
-```bash
-cd pollibondhu/backend
-
-# Run all tests with coverage report
-npm test -- --coverage
-
-# Watch mode
-npm run test:watch
-```
-
-**Coverage Results:**
-
-```
-File           | % Stmts | % Branch | % Funcs | % Lines |
----------------|---------|----------|---------|---------|
-All files      |  72.4   |  68.2    |  75.0   |  71.8   |
- patterns/     |  85.0   |  80.0    |  90.0   |  84.0   |
- services/     |  78.0   |  70.0    |  80.0   |  77.0   |
- controllers/  |  65.0   |  60.0    |  70.0   |  64.0   |
- validators/   |  90.0   |  85.0    | 100.0   |  90.0   |
-```
-
----
-
-## 👤 Demo Credentials
-
-### 🔑 Admin & Staff Accounts
-
-| Role | Name | Email | Password |
-|------|------|-------|----------|
-| 👑 Super Admin | Super Administrator | `superadmin@pollibondhu.test` | `admin123` |
-| 🛡️ Admin (Sub-Admin) | System Administrator | `admin@pollibondhu.test` | `admin123` |
-| 🏛️ Government Officer | Agriculture Officer Karim | `officer@pollibondhu.test` | `officer123` |
-
-### 🏪 Service Provider Account
-
-| Role | Name | Email | Password |
-|------|------|-------|----------|
-| 🌿 Service Provider | Karim Agro Services | `provider@pollibondhu.test` | `provider123` |
-
-### 🌾 Citizen / User Accounts
-
-| Name | Email | Password | District |
-|------|-------|----------|----------|
-| Rahim Uddin | `rahim@pollibondhu.test` | `user123` | Dinajpur, Rangpur |
-| Sultana Begum | `sultana@pollibondhu.test` | `user123` | Jhalokati, Barisal |
-| Abdur Rahman | `abdur@pollibondhu.test` | `user123` | Cox's Bazar, Chittagong |
-| Fatema Khatun | `fatema@pollibondhu.test` | `user123` | Khulna |
-| Hasan Ali | `hasan@pollibondhu.test` | `user123` | Sylhet |
-
----
-
-## 📁 Project Structure
-
-```
-Pollibondhu/
-└── pollibondhu/
-    ├── backend/
-    │   ├── src/
-    │   │   ├── patterns/        # 5 Design Patterns
-    │   │   │   ├── singleton/   # DatabaseManager, Logger
-    │   │   │   ├── factory/     # NotificationFactory
-    │   │   │   ├── strategy/    # SearchContext + strategies
-    │   │   │   ├── observer/    # NotificationSubject + observers
-    │   │   │   └── facade/      # AdminDashboardFacade
-    │   │   ├── controllers/     # HTTP request/response layer
-    │   │   ├── services/        # Business logic
-    │   │   ├── repositories/    # Prisma data access
-    │   │   ├── routes/          # API route definitions
-    │   │   ├── middleware/       # Auth, RBAC, Validation, Error
-    │   │   └── app.ts           # Express app entry point
-    │   ├── tests/
-    │   │   ├── unit/            # Service & pattern unit tests
-    │   │   └── integration/     # Full API integration tests
-    │   ├── prisma/
-    │   │   ├── schema.prisma    # 19-table database schema
-    │   │   └── seed.ts          # Bangladesh demo data
-    │   └── Dockerfile
-    ├── frontend/
-    │   ├── src/
-    │   │   ├── components/      # UI, Layout, Feedback components
-    │   │   ├── pages/           # Public, Auth, User, Admin pages
-    │   │   ├── contexts/        # AuthContext (JWT state)
-    │   │   ├── hooks/           # useAuth, useApi, useToast
-    │   │   └── types/           # Shared TypeScript types
-    │   └── vite.config.ts
-    ├── docker-compose.yml
-    └── README.md                # Detailed technical documentation
-```
-
----
-
-## 🔮 Future Roadmap
-
-- [ ] 📡 Real-time notifications via WebSocket
-- [ ] 📱 Mobile app (React Native)
-- [ ] 🇧🇩 Bengali language UI
-- [ ] 🤖 AI-powered crop disease detection
-- [ ] 🌦️ Bangladesh Meteorological Department API integration
-- [ ] 📶 Offline-first PWA for rural connectivity
-- [ ] 📲 SMS gateway (Bangladeshi providers)
-
----
-
-## 📜 License
-
-Academic project — SWE-382, Metropolitan University.
-
----
-
-<div align="center">
-
-**Developed with ❤️ for rural Bangladesh**
-
-*PolliBondhu — পল্লীবন্ধু*
-
-</div>
+Academic project for SWE-382, Metropolitan University.
