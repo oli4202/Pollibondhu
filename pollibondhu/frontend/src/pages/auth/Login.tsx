@@ -31,11 +31,10 @@ export default function Login() {
         } else {
           const roles = loggedInUser?.roles || [];
           const role = loggedInUser?.role;
-          if (roles.includes('SUPER_ADMIN') || roles.includes('SUB_ADMIN') || role === 'ADMIN' || role === 'SUPER_ADMIN') {
+          const allRoles = [...new Set([...roles, role].filter(Boolean))];
+          if (allRoles.includes('ADMIN') || allRoles.includes('OFFICER')) {
             navigate('/admin');
-          } else if (roles.includes('OFFICER') || role === 'OFFICER') {
-            navigate('/officer');
-          } else if (roles.includes('SERVICE_PROVIDER') || roles.includes('PROVIDER') || roles.includes('GOV_SERVICE_PROVIDER') || role === 'PROVIDER' || role === 'SERVICE_PROVIDER' || role === 'GOV_SERVICE_PROVIDER') {
+          } else if (allRoles.some(r => ['PROVIDER', 'SERVICE_PROVIDER', 'GOV_SERVICE_PROVIDER'].includes(r))) {
             navigate('/provider');
           } else {
             navigate('/dashboard');

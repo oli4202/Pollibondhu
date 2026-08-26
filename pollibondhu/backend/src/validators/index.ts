@@ -14,22 +14,23 @@ export const loginSchema = z.object({
 });
 
 export const serviceSchema = z.object({
-  title: z.string().min(3),
-  description: z.string().optional(),
-  price: z.number().optional(),
-  location: z.string().optional(),
-  district: z.string().optional(),
-  category_id: z.number().optional(),
+  title: z.string().trim().min(3).max(100),
+  description: z.string().trim().min(10).max(2000),
+  price: z.number().finite().min(0).optional(),
+  location: z.string().trim().max(200).optional(),
+  district: z.string().trim().max(100).optional(),
+  category_id: z.number().int().positive().optional(),
+  category: z.string().trim().min(2).max(100).optional(),
 });
 
 export const complaintSchema = z.object({
-  category: z.string().min(1),
-  subject: z.string().min(3),
-  description: z.string().min(10),
-  priority: z.enum(['LOW', 'MEDIUM', 'HIGH']).optional(),
+  category: z.string().trim().min(1).max(100),
+  subject: z.string().trim().min(3).max(200),
+  description: z.string().trim().min(10).max(5000),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional(),
 });
 
 export const updateStatusSchema = z.object({
   status: z.enum(['PENDING', 'REVIEWING', 'RESOLVED', 'REJECTED']),
-  notes: z.string().optional(),
+  notes: z.string().trim().max(5000).optional(),
 });

@@ -51,6 +51,8 @@ import MyNotifications from '@/pages/user/MyNotifications';
 // Provider Pages
 import ProviderDashboard from '@/pages/provider/ProviderDashboard';
 import ProviderServices from '@/pages/provider/ProviderServices';
+import ProviderMessages from '@/pages/provider/ProviderMessages';
+import ProviderComplaints from '@/pages/provider/ProviderComplaints';
 
 // Officer Pages
 import OfficerDashboardPage from '@/pages/officer/OfficerDashboard';
@@ -94,9 +96,24 @@ function Protected({
   }
 
   if (!user) return <Navigate to="/login" replace />;
-  if (roles && !hasRole(...roles)) return <Navigate to="/" replace />;
-  if (permission && !hasPermission(permission)) return <Navigate to="/" replace />;
-  if (anyPermission && !hasAnyPermission(...anyPermission)) return <Navigate to="/" replace />;
+
+  let allowed = false;
+  let hasChecks = false;
+
+  if (roles) {
+    hasChecks = true;
+    if (hasRole(...roles)) allowed = true;
+  }
+  if (permission) {
+    hasChecks = true;
+    if (hasPermission(permission)) allowed = true;
+  }
+  if (anyPermission) {
+    hasChecks = true;
+    if (hasAnyPermission(...anyPermission)) allowed = true;
+  }
+
+  if (hasChecks && !allowed) return <Navigate to="/" replace />;
 
   return children;
 }
@@ -141,7 +158,7 @@ export default function AppRoutes() {
       {/* ============================================ */}
       {/* CITIZEN DASHBOARD                            */}
       {/* ============================================ */}
-      <Route element={<Protected anyPermission={['dashboard.citizen.view', 'dashboard.admin.view', 'dashboard.super.view', 'dashboard.subadmin.view', 'dashboard.officer.view']}><DashboardLayout /></Protected>}>
+      <Route element={<Protected roles={['USER', 'FARMER', 'CITIZEN']} anyPermission={['dashboard.citizen.view', 'dashboard.admin.view', 'dashboard.super.view', 'dashboard.subadmin.view', 'dashboard.officer.view']}><DashboardLayout /></Protected>}>
         <Route path="/dashboard" element={<UserDashboard />} />
         <Route path="/dashboard/profile" element={<ProfilePage />} />
         <Route path="/dashboard/applications" element={<MyApplications />} />
@@ -153,9 +170,11 @@ export default function AppRoutes() {
       {/* ============================================ */}
       {/* PROVIDER DASHBOARD                           */}
       {/* ============================================ */}
-      <Route path="/provider" element={<Protected anyPermission={['service.create', 'dashboard.citizen.view']}><DashboardLayout /></Protected>}>
+      <Route path="/provider" element={<Protected roles={['PROVIDER', 'SERVICE_PROVIDER', 'GOV_SERVICE_PROVIDER', 'ADMIN']}><DashboardLayout /></Protected>}>
         <Route index element={<ProviderDashboard />} />
         <Route path="services" element={<ProviderServices />} />
+        <Route path="messages" element={<ProviderMessages />} />
+        <Route path="complaints" element={<ProviderComplaints />} />
       </Route>
 
       {/* ============================================ */}

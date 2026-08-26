@@ -1,7 +1,9 @@
 import { Router, Request, Response } from 'express';
+import multer from 'multer';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { sendSuccess, sendError } from '../utils/apiResponse';
 import { prisma } from '../patterns/singleton/DatabaseManager';
+import { chatUpload } from '../utils/upload';
 
 const router = Router();
 
@@ -27,11 +29,38 @@ router.get('/conversations', authMiddleware, async (req: Request, res: Response)
       orderBy: { conversation: { updated_at: 'desc' } },
     });
 
-    const conversations = members.map((m: any) => ({
-      ...m.conversation,
-      my_role: m.role,
-      last_message: m.conversation.messages[0] || null,
-      unread_count: 0, // TODO: track reads
+    // Compute real unread counts for each conversation
+    const conversations = await Promise.all(members.map(async (m: any) => {
+      let unreadCount = 0;
+      const lastRead = m.last_read_at;
+
+      if (lastRead) {
+        // Count messages sent by others since last read
+        unreadCount = await (prisma as any).chatMessage.count({
+          where: {
+            conversation_id: m.conversation_id,
+            sender_id: { not: userId },
+            created_at: { gt: lastRead },
+            is_deleted: false,
+          },
+        });
+      } else {
+        // Never read — count all messages from others
+        unreadCount = await (prisma as any).chatMessage.count({
+          where: {
+            conversation_id: m.conversation_id,
+            sender_id: { not: userId },
+            is_deleted: false,
+          },
+        });
+      }
+
+      return {
+        ...m.conversation,
+        my_role: m.role,
+        last_message: m.conversation.messages[0] || null,
+        unread_count: unreadCount,
+      };
     }));
 
     sendSuccess(res, conversations);
@@ -213,6 +242,7 @@ router.get('/conversations/:id/messages', authMiddleware, async (req: Request, r
       include: {
         sender: { select: { user_id: true, full_name: true, avatar_url: true, role: true } },
         reply_to: { select: { message_id: true, content: true, sender: { select: { full_name: true } } } },
+        reads: { select: { user_id: true, read_at: true } },
       },
       orderBy: { created_at: 'desc' },
       skip: (page - 1) * limit,
@@ -256,6 +286,115 @@ router.post('/conversations/:id/messages', authMiddleware, async (req: Request, 
 
     sendSuccess(res, message, 'Message sent', 201);
   } catch (err: any) { sendError(res, err.message, 500); }
+});
+
+// Mark messages as read in a conversation
+router.post('/conversations/:id/read', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.user_id;
+    const conversationId = parseInt(req.params.id);
+
+    // Verify membership
+    const member = await (prisma as any).chatMember.findUnique({
+      where: { conversation_id_user_id: { conversation_id: conversationId, user_id: userId } },
+    });
+    if (!member) { sendError(res, 'Not a member of this conversation', 403); return; }
+
+    const now = new Date();
+
+    // Update last_read_at on the member record
+    await (prisma as any).chatMember.update({
+      where: { conversation_id_user_id: { conversation_id: conversationId, user_id: userId } },
+      data: { last_read_at: now },
+    });
+
+    // Find all unread messages from others and create MessageRead records
+    const unreadMessages = await (prisma as any).chatMessage.findMany({
+      where: {
+        conversation_id: conversationId,
+        sender_id: { not: userId },
+        is_deleted: false,
+        reads: { none: { user_id: userId } },
+        ...(member.last_read_at ? { created_at: { gt: member.last_read_at } } : {}),
+      },
+      select: { message_id: true },
+    });
+
+    if (unreadMessages.length > 0) {
+      await (prisma as any).messageRead.createMany({
+        data: unreadMessages.map((msg: any) => ({
+          message_id: msg.message_id,
+          user_id: userId,
+        })),
+      }).catch(() => {}); // Ignore duplicate key errors
+    }
+
+    sendSuccess(res, { marked_read: unreadMessages.length }, 'Messages marked as read');
+  } catch (err: any) { sendError(res, err.message, 500); }
+});
+
+// Get read receipts for messages in a conversation
+router.get('/conversations/:id/read-receipts', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const conversationId = parseInt(req.params.id);
+
+    // Get all read records for messages in this conversation
+    const reads = await (prisma as any).messageRead.findMany({
+      where: {
+        message: { conversation_id: conversationId },
+      },
+      select: {
+        message_id: true,
+        user_id: true,
+        read_at: true,
+      },
+    });
+
+    sendSuccess(res, reads);
+  } catch (err: any) { sendError(res, err.message, 500); }
+});
+
+// Upload a file for a chat conversation
+router.post('/conversations/:id/upload', authMiddleware, (req: Request, res: Response) => {
+  const conversationId = parseInt(req.params.id);
+  const userId = (req as any).user?.user_id;
+
+  chatUpload.single('file')(req, res, async (err) => {
+    if (err) {
+      if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return sendError(res, 'File too large. Maximum size is 10MB.', 400);
+        }
+        return sendError(res, err.message, 400);
+      }
+      return sendError(res, err.message, 400);
+    }
+
+    if (!req.file) {
+      return sendError(res, 'No file uploaded', 400);
+    }
+
+    try {
+      // Verify membership
+      const member = await (prisma as any).chatMember.findUnique({
+        where: { conversation_id_user_id: { conversation_id: conversationId, user_id: userId } },
+      });
+      if (!member) {
+        return sendError(res, 'Not a member of this conversation', 403);
+      }
+
+      const fileUrl = `/uploads/chat/${req.file.filename}`;
+
+      sendSuccess(res, {
+        file_url: fileUrl,
+        file_name: req.file.originalname,
+        file_size: req.file.size,
+        mime_type: req.file.mimetype,
+      }, 'File uploaded successfully', 201);
+    } catch (e: any) {
+      sendError(res, e.message, 500);
+    }
+  });
 });
 
 // ============================================
@@ -384,7 +523,7 @@ router.get('/complaints', authMiddleware, async (req: Request, res: Response) =>
   try {
     const userId = (req as any).user?.user_id;
     const role = (req as any).user?.role;
-    const isProvider = ['SERVICE_PROVIDER', 'GOV_SERVICE_PROVIDER', 'OFFICER', 'ADMIN', 'SUPER_ADMIN'].includes(role);
+    const isProvider = ['SERVICE_PROVIDER', 'GOV_SERVICE_PROVIDER', 'OFFICER', 'ADMIN'].includes(role);
 
     const where: any = isProvider ? { provider_id: userId } : { user_id: userId };
 

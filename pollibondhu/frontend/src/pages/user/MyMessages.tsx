@@ -7,7 +7,7 @@ import {
   MessageSquare, Send, Users, Plus, Search, Phone, Video, MoreVertical,
   Mic, MicOff, Image, Paperclip, Smile, X, ChevronDown, ChevronLeft,
   Bot, Radio, AlertTriangle, Building2, Shield, Heart, Wrench, FileText,
-  Play, Pause, Square, Check, CheckCheck, UserPlus, Sparkles, Loader2
+  Play, Pause, Square, Check, CheckCheck, UserPlus, Sparkles, Loader2, Download, FileIcon, Eye
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/feedback/ToastProvider';
@@ -35,18 +35,21 @@ interface Conversation {
   provider?: { full_name: string; role: string };
   service?: { title: string };
   my_role?: string;
+  unread_count?: number;
   _count?: { members: number; posts?: number };
   created_at: string;
 }
 
 interface ChatMessage {
   message_id: number;
+  conversation_id: number;
   content?: string;
   message_type: string; // TEXT, IMAGE, VOICE, FILE, SYSTEM
   media_url?: string;
   media_duration?: number;
   sender: User;
   reply_to?: { message_id: number; content?: string; sender: { full_name: string } };
+  reads?: { user_id: number; read_at: string }[];
   created_at: string;
 }
 
@@ -186,39 +189,60 @@ export default function MyMessages() {
   const [searchQuery, setSearchQuery] = useState('');
   const [complaintTarget, setComplaintTarget] = useState<{ provider_id: number; service_id?: number; provider_name: string } | null>(null);
   const [complaintForm, setComplaintForm] = useState({ subject: '', description: '', category: 'GENERAL', priority: 'MEDIUM' });
-  const [subjectMode, setSubjectMode] = useState<'select' | 'manual'>('select');
-  const [descMode, setDescMode] = useState<'select' | 'manual'>('select');
+  const [complaintFile, setComplaintFile] = useState<File | null>(null);
+  const [complaintFileUploading, setComplaintFileUploading] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Ref to track selected conversation without causing socket reconnections
+  const selectedConvoRef = useRef<Conversation | null>(null);
+  selectedConvoRef.current = selectedConvo;
 
   // ============================================
-  // SOCKET.IO CONNECTION
+  // SOCKET.IO CONNECTION (stable — only reconnects when user changes)
   // ============================================
   useEffect(() => {
+    if (!user) return;
+
+    const token = localStorage.getItem('accessToken');
+    if (!token) return;
+
     const socket = io(api.defaults.baseURL?.replace('/api', '') || 'http://localhost:4000', {
       transports: ['websocket', 'polling'],
+      auth: { token },
     });
     socketRef.current = socket;
 
     socket.on('connect', () => {
-      if (user) socket.emit('join_user', user.user_id);
+      socket.emit('join_user', user.user_id);
     });
 
     socket.on('chat:message', (msg: ChatMessage) => {
-      if (selectedConvo && msg.sender.user_id !== user?.user_id) {
+      const currentConvo = selectedConvoRef.current;
+      // Add message to chat if it belongs to the currently open conversation
+      // and is not from the current user (we do optimistic update for own messages)
+      if (currentConvo && msg.conversation_id === currentConvo.conversation_id && msg.sender.user_id !== user.user_id) {
         setMessages(prev => [...prev, msg]);
       }
-      // Update last message in conversation list
+      // Update last message in conversation sidebar
       setConversations(prev => prev.map(c =>
-        c.conversation_id === msg.sender.user_id ? { ...c, last_message: { content: msg.content || '', created_at: msg.created_at, sender: msg.sender } } : c
+        c.conversation_id === msg.conversation_id
+          ? { ...c, last_message: { content: msg.content || '', created_at: msg.created_at, sender: msg.sender } }
+          : c
       ));
     });
 
-    socket.on('chat:typing', (data: { userId: number; isTyping: boolean }) => {
-      setTypingUsers(prev => {
-        const next = new Set(prev);
-        if (data.isTyping) next.add(data.userId); else next.delete(data.userId);
-        return next;
-      });
+    socket.on('chat:typing', (data: { userId: number; conversationId: number; isTyping: boolean }) => {
+      if (data.conversationId === selectedConvoRef.current?.conversation_id) {
+        setTypingUsers(prev => {
+          const next = new Set(prev);
+          if (data.isTyping) next.add(data.userId); else next.delete(data.userId);
+          return next;
+        });
+      }
     });
 
     socket.on('channel:post', (post: ChannelPost) => {
@@ -231,8 +255,34 @@ export default function MyMessages() {
       ));
     });
 
+    socket.on('chat:read', (data: { userId: number; conversationId: number; readAt: string }) => {
+      // Update unread count for the conversation in sidebar
+      setConversations(prev => prev.map(c =>
+        c.conversation_id === data.conversationId
+          ? { ...c, unread_count: 0 }
+          : c
+      ));
+      // Update read status on messages if viewing that conversation
+      const currentConvo = selectedConvoRef.current;
+      if (currentConvo && data.conversationId === currentConvo.conversation_id) {
+        setMessages(prev => prev.map(msg => {
+          if (msg.sender.user_id !== user.user_id && (!msg.reads || !msg.reads.some(r => r.user_id === data.userId))) {
+            return {
+              ...msg,
+              reads: [...(msg.reads || []), { user_id: data.userId, read_at: data.readAt }],
+            };
+          }
+          return msg;
+        }));
+      }
+    });
+
+    socket.on('chat:error', (data: { error: string }) => {
+      addToast(data.error, 'error');
+    });
+
     return () => { socket.disconnect(); };
-  }, [user, selectedConvo]);
+  }, [user, addToast]);
 
   // ============================================
   // DATA FETCHING
@@ -281,10 +331,21 @@ export default function MyMessages() {
   // SELECT CONVERSATION
   // ============================================
   async function selectConversation(convo: Conversation) {
+    // Leave previous conversation room
+    if (selectedConvo) {
+      socketRef.current?.emit('chat:leave', selectedConvo.conversation_id);
+    }
     setSelectedConvo(convo);
     setMessages([]);
     setChannelPosts([]);
+    setTypingUsers(new Set());
     socketRef.current?.emit('chat:join', convo.conversation_id);
+
+    // Mark as read
+    socketRef.current?.emit('chat:read', { conversationId: convo.conversation_id });
+    setConversations(prev => prev.map(c =>
+      c.conversation_id === convo.conversation_id ? { ...c, unread_count: 0 } : c
+    ));
 
     if (convo.type === 'CHANNEL') {
       try {
@@ -315,6 +376,7 @@ export default function MyMessages() {
     // Optimistic update
     setMessages(prev => [...prev, {
       message_id: Date.now(),
+      conversation_id: selectedConvo.conversation_id,
       content: input,
       message_type: 'TEXT',
       sender: { user_id: user.user_id, full_name: user.full_name, role: user.role },
@@ -348,6 +410,7 @@ export default function MyMessages() {
           });
           setMessages(prev => [...prev, {
             message_id: Date.now(),
+            conversation_id: selectedConvo.conversation_id,
             message_type: 'VOICE',
             media_url: url,
             sender: { user_id: user.user_id, full_name: user.full_name, role: user.role },
@@ -365,6 +428,64 @@ export default function MyMessages() {
   function stopRecording() {
     mediaRecorderRef.current?.stop();
     setIsRecording(false);
+  }
+
+  // ============================================
+  // FILE UPLOAD
+  // ============================================
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'file') {
+    const file = e.target.files?.[0];
+    if (!file || !selectedConvo || !user) return;
+
+    // Validate size (10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      addToast('File too large. Maximum size is 10MB.', 'error');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await api.post(`/chat/conversations/${selectedConvo.conversation_id}/upload`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      const { file_url, mime_type } = res.data.data;
+
+      // Determine message type from mime
+      let messageType = 'FILE';
+      if (mime_type.startsWith('image/')) messageType = 'IMAGE';
+      else if (mime_type.startsWith('video/')) messageType = 'VIDEO';
+
+      // Send via socket
+      socketRef.current?.emit('chat:message', {
+        conversationId: selectedConvo.conversation_id,
+        content: file.name,
+        messageType,
+        mediaUrl: file_url,
+      });
+
+      // Optimistic update
+      setMessages(prev => [...prev, {
+        message_id: Date.now(),
+        conversation_id: selectedConvo.conversation_id,
+        content: file.name,
+        message_type: messageType,
+        media_url: file_url,
+        sender: { user_id: user.user_id, full_name: user.full_name, role: user.role },
+        created_at: new Date().toISOString(),
+      }]);
+
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+    } catch {
+      addToast('Failed to upload file', 'error');
+    } finally {
+      setUploading(false);
+      // Reset file input
+      e.target.value = '';
+    }
   }
 
   // ============================================
@@ -408,8 +529,12 @@ export default function MyMessages() {
   // AI SUGGEST COMPLAINT
   // ============================================
   async function aiSuggestComplaint() {
-    if (!complaintForm.category || !complaintForm.description) {
-      addToast('Please select a category and type a brief description first', 'error');
+    if (!complaintForm.category) {
+      addToast('Please select a category first', 'error');
+      return;
+    }
+    if (!complaintForm.description) {
+      addToast('Please type a brief description first', 'error');
       return;
     }
     setAiLoading(true);
@@ -431,8 +556,6 @@ Respond in JSON format ONLY:
         const parsed = JSON.parse(jsonMatch[0]);
         if (parsed.title) setComplaintForm(f => ({ ...f, subject: parsed.title }));
         if (parsed.description) setComplaintForm(f => ({ ...f, description: parsed.description }));
-        setSubjectMode('manual');
-        setDescMode('manual');
         addToast('AI suggestions applied! Review and edit as needed.');
       } else {
         addToast('AI response was not in expected format. Try again.', 'error');
@@ -448,19 +571,48 @@ Respond in JSON format ONLY:
   // FILE COMPLAINT
   // ============================================
   async function fileComplaint() {
-    if (!complaintTarget || !complaintForm.subject || !complaintForm.description) return;
+    if (!complaintTarget) {
+      addToast('Please select a provider to file the complaint against', 'error');
+      return;
+    }
+    if (!complaintForm.subject) {
+      addToast('Please enter a complaint subject', 'error');
+      return;
+    }
+    if (!complaintForm.description) {
+      addToast('Please enter a complaint description', 'error');
+      return;
+    }
+    setComplaintFileUploading(true);
     try {
+      // Upload attachment if present
+      let attachmentUrl: string | undefined;
+      if (complaintFile) {
+        const formData = new FormData();
+        formData.append('file', complaintFile);
+        const uploadRes = await api.post('/upload/file', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        attachmentUrl = uploadRes.data?.data?.url || uploadRes.data?.url;
+      }
+
       await api.post('/chat/complaints', {
         provider_id: complaintTarget.provider_id,
         service_id: complaintTarget.service_id,
         ...complaintForm,
+        attachment_url: attachmentUrl || null,
       });
       addToast('Complaint filed! You can chat with the provider about it.');
       setShowComplaintForm(false);
       setComplaintForm({ subject: '', description: '', category: 'GENERAL', priority: 'MEDIUM' });
+      setComplaintFile(null);
       fetchComplaints();
       fetchConversations();
-    } catch { addToast('Failed to file complaint', 'error'); }
+    } catch (err: any) {
+      addToast(err?.response?.data?.error || 'Failed to file complaint', 'error');
+    } finally {
+      setComplaintFileUploading(false);
+    }
   }
 
   // ============================================
@@ -561,11 +713,18 @@ Respond in JSON format ONLY:
                       {c.last_message?.content || 'No messages yet'}
                     </p>
                   </div>
-                  {c.last_message && (
-                    <span className="text-[10px] text-earth-400 shrink-0">
-                      {new Date(c.last_message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
-                  )}
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    {c.last_message && (
+                      <span className="text-[10px] text-earth-400">
+                        {new Date(c.last_message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    )}
+                    {(c.unread_count ?? 0) > 0 && (
+                      <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-polli-600 text-white text-[10px] font-bold flex items-center justify-center">
+                        {c.unread_count! > 99 ? '99+' : c.unread_count}
+                      </span>
+                    )}
+                  </div>
                 </button>
               ))}
             </>
@@ -767,14 +926,51 @@ Respond in JSON format ONLY:
                             <span className="text-[10px]">{msg.media_duration ? `${msg.media_duration}s` : '0:12'}</span>
                           </div>
                         ) : msg.message_type === 'IMAGE' ? (
-                          <img src={msg.media_url} alt="" className="rounded-lg max-w-full" />
+                          <div>
+                            <img
+                              src={msg.media_url}
+                              alt={msg.content || 'Image'}
+                              className="rounded-lg max-w-full max-h-64 object-cover cursor-pointer hover:opacity-90 transition"
+                              onClick={() => msg.media_url && setImagePreview(msg.media_url)}
+                            />
+                            {msg.content && <p className="text-xs mt-1 opacity-70">{msg.content}</p>}
+                          </div>
+                        ) : msg.message_type === 'VIDEO' ? (
+                          <div>
+                            <video
+                              src={msg.media_url}
+                              controls
+                              className="rounded-lg max-w-full max-h-64"
+                            />
+                            {msg.content && <p className="text-xs mt-1 opacity-70">{msg.content}</p>}
+                          </div>
+                        ) : msg.message_type === 'FILE' ? (
+                          <a
+                            href={msg.media_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-3 p-2 rounded-lg bg-earth-50 hover:bg-earth-100 transition border border-earth-200"
+                          >
+                            <div className="h-10 w-10 rounded-lg bg-polli-100 text-polli-600 flex items-center justify-center shrink-0">
+                              <FileIcon size={18} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium truncate">{msg.content || 'File'}</p>
+                              <p className="text-[10px] opacity-60">Tap to open</p>
+                            </div>
+                            <Download size={14} className="shrink-0 opacity-50" />
+                          </a>
                         ) : (
                           <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                         )}
                       </div>
                       <p className={`text-[10px] mt-0.5 ${isMine ? 'text-right' : 'text-left'} text-earth-400`}>
                         {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        {isMine && <CheckCheck size={10} className="inline ml-1 text-polli-500" />}
+                        {isMine && (
+                          (msg.reads && msg.reads.length > 0)
+                            ? <span title="Read"><CheckCheck size={10} className="inline ml-1 text-blue-500" /></span>
+                            : <span title="Sent"><CheckCheck size={10} className="inline ml-1 text-earth-400" /></span>
+                        )}
                       </p>
                     </div>
                   </div>
@@ -785,9 +981,31 @@ Respond in JSON format ONLY:
 
             {/* Input Bar */}
             <div className="px-4 py-3 border-t border-earth-100 bg-white">
+              {/* Hidden file inputs */}
+              <input ref={imageInputRef} type="file" accept="image/*" className="hidden"
+                onChange={e => handleFileUpload(e, 'image')} />
+              <input ref={fileInputRef} type="file" accept="image/*,video/*,.pdf,.doc,.docx" className="hidden"
+                onChange={e => handleFileUpload(e, 'file')} />
+
+              {uploading && (
+                <div className="mb-2 flex items-center gap-2 text-xs text-polli-600">
+                  <Loader2 size={14} className="animate-spin" /> Uploading file...
+                </div>
+              )}
+
               <div className="flex items-center gap-2">
-                <button className="p-2 rounded-lg hover:bg-earth-100 text-earth-500"><Image size={18} /></button>
-                <button className="p-2 rounded-lg hover:bg-earth-100 text-earth-500"><Paperclip size={18} /></button>
+                <button onClick={() => imageInputRef.current?.click()}
+                  disabled={uploading}
+                  className="p-2 rounded-lg hover:bg-earth-100 text-earth-500 disabled:opacity-50"
+                  title="Send image">
+                  <Image size={18} />
+                </button>
+                <button onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="p-2 rounded-lg hover:bg-earth-100 text-earth-500 disabled:opacity-50"
+                  title="Send file">
+                  <Paperclip size={18} />
+                </button>
 
                 <div className="flex-1 relative">
                   <input value={input} onChange={e => setInput(e.target.value)}
@@ -885,10 +1103,24 @@ Respond in JSON format ONLY:
         </div>
       )}
 
+      {/* Image Preview Lightbox */}
+      {imagePreview && (
+        <div className="fixed inset-0 z-[70] grid place-items-center bg-earth-900/80 p-4 backdrop-blur-sm"
+          onClick={() => setImagePreview(null)}>
+          <button onClick={() => setImagePreview(null)}
+            className="absolute top-4 right-4 p-2 rounded-full bg-white/20 text-white hover:bg-white/30 transition z-10">
+            <X size={20} />
+          </button>
+          <img src={imagePreview} alt="Preview"
+            className="max-w-full max-h-[85vh] rounded-xl shadow-2xl object-contain"
+            onClick={e => e.stopPropagation()} />
+        </div>
+      )}
+
       {/* Complaint Form Modal */}
       {showComplaintForm && (
         <div className="fixed inset-0 z-[60] grid place-items-center bg-earth-900/50 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-bold flex items-center gap-2"><AlertTriangle size={18} className="text-amber-500" /> File Complaint</h2>
               <button onClick={() => setShowComplaintForm(false)}><X size={18} /></button>
@@ -936,76 +1168,56 @@ Respond in JSON format ONLY:
               </div>
             </div>
 
-            {/* Subject */}
+            {/* Subject — always show text input + suggestion chips */}
             <div className="mb-3">
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-xs font-semibold text-earth-500">Subject *</label>
-                <div className="flex gap-1">
-                  <button onClick={() => setSubjectMode('select')}
-                    className={`px-2 py-0.5 rounded text-[9px] font-medium transition ${subjectMode === 'select' ? 'bg-polli-100 text-polli-700' : 'text-earth-400 hover:text-earth-600'}`}>
-                    Select</button>
-                  <button onClick={() => setSubjectMode('manual')}
-                    className={`px-2 py-0.5 rounded text-[9px] font-medium transition ${subjectMode === 'manual' ? 'bg-polli-100 text-polli-700' : 'text-earth-400 hover:text-earth-600'}`}>
-                    Manual</button>
-                </div>
-              </div>
-              {subjectMode === 'select' ? (
-                <div className="space-y-1">
-                  {SUBJECT_SUGGESTIONS[complaintForm.category as keyof typeof SUBJECT_SUGGESTIONS]?.map((subj, i) => (
+              <label className="text-xs font-semibold text-earth-500 mb-1 block">Subject *</label>
+              {SUBJECT_SUGGESTIONS[complaintForm.category as keyof typeof SUBJECT_SUGGESTIONS] && (
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {SUBJECT_SUGGESTIONS[complaintForm.category as keyof typeof SUBJECT_SUGGESTIONS].map((subj, i) => (
                     <button key={i} onClick={() => setComplaintForm(f => ({ ...f, subject: subj }))}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-xs border transition hover:bg-polli-50 ${
-                        complaintForm.subject === subj ? 'border-polli-500 bg-polli-50 text-polli-700' : 'border-earth-200 text-earth-600'
+                      className={`px-2.5 py-1 rounded-full text-[10px] font-medium border transition ${
+                        complaintForm.subject === subj ? 'border-polli-500 bg-polli-50 text-polli-700' : 'border-earth-200 text-earth-500 hover:border-polli-300'
                       }`}>
                       {subj}
                     </button>
-                  )) || (
-                    <p className="text-xs text-earth-400 py-2">Select a category first</p>
-                  )}
-                  <button onClick={() => setSubjectMode('manual')}
-                    className="w-full text-left px-3 py-2 rounded-lg text-xs border border-dashed border-earth-300 text-earth-400 hover:border-polli-400 hover:text-polli-600 transition">
-                    ✏️ Write my own subject...
-                  </button>
+                  ))}
                 </div>
-              ) : (
-                <input value={complaintForm.subject} onChange={e => setComplaintForm(f => ({ ...f, subject: e.target.value }))}
-                  placeholder="Enter complaint subject" className="w-full border border-earth-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-polli-500" />
               )}
+              <input value={complaintForm.subject} onChange={e => setComplaintForm(f => ({ ...f, subject: e.target.value }))}
+                placeholder="Enter complaint subject" className="w-full border border-earth-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-polli-500" />
             </div>
 
-            {/* Description */}
+            {/* Description — always show textarea + template chips */}
             <div className="mb-3">
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-xs font-semibold text-earth-500">Description *</label>
-                <div className="flex gap-1">
-                  <button onClick={() => setDescMode('select')}
-                    className={`px-2 py-0.5 rounded text-[9px] font-medium transition ${descMode === 'select' ? 'bg-polli-100 text-polli-700' : 'text-earth-400 hover:text-earth-600'}`}>
-                    Templates</button>
-                  <button onClick={() => setDescMode('manual')}
-                    className={`px-2 py-0.5 rounded text-[9px] font-medium transition ${descMode === 'manual' ? 'bg-polli-100 text-polli-700' : 'text-earth-400 hover:text-earth-600'}`}>
-                    Manual</button>
-                </div>
-              </div>
-              {descMode === 'select' ? (
-                <div className="space-y-1">
-                  {DESCRIPTION_TEMPLATES[complaintForm.category as keyof typeof DESCRIPTION_TEMPLATES]?.map((tpl, i) => (
+              <label className="text-xs font-semibold text-earth-500 mb-1 block">Description *</label>
+              {DESCRIPTION_TEMPLATES[complaintForm.category as keyof typeof DESCRIPTION_TEMPLATES] && (
+                <div className="space-y-1 mb-2">
+                  {DESCRIPTION_TEMPLATES[complaintForm.category as keyof typeof DESCRIPTION_TEMPLATES].map((tpl, i) => (
                     <button key={i} onClick={() => setComplaintForm(f => ({ ...f, description: tpl }))}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-xs border transition hover:bg-polli-50 ${
-                        complaintForm.description === tpl ? 'border-polli-500 bg-polli-50 text-polli-700' : 'border-earth-200 text-earth-600'
+                      className={`w-full text-left px-3 py-2 rounded-lg text-[10px] border transition hover:bg-polli-50 ${
+                        complaintForm.description === tpl ? 'border-polli-500 bg-polli-50 text-polli-700' : 'border-earth-200 text-earth-500'
                       }`}>
                       <span className="line-clamp-2">{tpl}</span>
                     </button>
-                  )) || (
-                    <p className="text-xs text-earth-400 py-2">Select a category first</p>
-                  )}
-                  <button onClick={() => setDescMode('manual')}
-                    className="w-full text-left px-3 py-2 rounded-lg text-xs border border-dashed border-earth-300 text-earth-400 hover:border-polli-400 hover:text-polli-600 transition">
-                    ✏️ Write my own description...
-                  </button>
+                  ))}
                 </div>
-              ) : (
-                <textarea value={complaintForm.description} onChange={e => setComplaintForm(f => ({ ...f, description: e.target.value }))}
-                  placeholder="Describe the issue in detail" rows={4}
-                  className="w-full border border-earth-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-polli-500" />
+              )}
+              <textarea value={complaintForm.description} onChange={e => setComplaintForm(f => ({ ...f, description: e.target.value }))}
+                placeholder="Describe the issue in detail" rows={4}
+                className="w-full border border-earth-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-polli-500" />
+            </div>
+
+            {/* Evidence File Attachment */}
+            <div className="mb-3">
+              <label className="text-xs font-semibold text-earth-500 mb-1 block">Evidence (optional)</label>
+              <label className="flex items-center gap-2 w-full border border-dashed border-earth-300 rounded-lg px-3 py-2.5 text-sm cursor-pointer hover:border-polli-400 hover:bg-polli-50/50 transition">
+                <Paperclip size={14} className="text-earth-400" />
+                <span className="text-earth-500">{complaintFile ? complaintFile.name : 'Attach photo, video, or document'}</span>
+                <input type="file" accept="image/*,video/*,.pdf,.doc,.docx" className="hidden"
+                  onChange={e => setComplaintFile(e.target.files?.[0] || null)} />
+              </label>
+              {complaintFile && (
+                <button onClick={() => setComplaintFile(null)} className="text-[10px] text-red-500 mt-1 hover:underline">Remove file</button>
               )}
             </div>
 
@@ -1018,10 +1230,9 @@ Respond in JSON format ONLY:
                 <><Sparkles size={16} /> AI Suggest Title & Description</>
               )}
             </button>
-            <p className="text-[10px] text-earth-400 -mt-3 mb-4 text-center">Describe the issue briefly above, then click AI to generate a professional complaint</p>
 
-            <Button onClick={fileComplaint} disabled={!complaintTarget || !complaintForm.subject || !complaintForm.description} className="w-full">
-              Submit Complaint
+            <Button onClick={fileComplaint} disabled={!complaintTarget || !complaintForm.subject || !complaintForm.description || complaintFileUploading} className="w-full">
+              {complaintFileUploading ? (<><Loader2 size={14} className="animate-spin" /> Submitting...</>) : 'Submit Complaint'}
             </Button>
           </div>
         </div>

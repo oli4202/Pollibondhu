@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Breadcrumb } from '@/components/ui/Breadcrumb';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { Wrench, Plus, Edit, Trash2, Eye, EyeOff, XCircle, CheckCircle, Clock, X, Sparkles, Building2 } from 'lucide-react';
+import { Wrench, Plus, Edit, Trash2, Eye, EyeOff, XCircle, CheckCircle, Clock, X, Sparkles, Building2, Loader2, CheckCircle2 } from 'lucide-react';
 import { useToast } from '@/components/feedback/ToastProvider';
 import api from '@/utils/api';
 
@@ -36,7 +36,25 @@ const emptyForm: ServiceForm = { title: '', description: '', price: '', location
 const districts = [
   'Dhaka', 'Chattogram', 'Rajshahi', 'Khulna', 'Barishal', 'Sylhet', 'Rangpur', 'Mymensingh',
   'Comilla', 'Gazipur', 'Narayanganj', 'Bogura', "Cox's Bazar", 'Jessore', 'Dinajpur',
+  'Faridpur', 'Gopalganj', 'Kishoreganj', 'Madaripur', 'Manikganj', 'Munshiganj',
+  'Narsingdi', 'Rajbari', 'Shariatpur', 'Tangail', 'Bandarban', 'Brahmanbaria',
+  'Chandpur', 'Feni', 'Lakshmipur', 'Noakhali', 'Habiganj', 'Moulvibazar',
+  'Sunamganj', 'Jhalokathi', 'Patuakhali', 'Pirojpur', 'Bagerhat', 'Chuadanga',
+  'Jashore', 'Kushtua', 'Magura', 'Meherpur', 'Narail', 'Satkhira',
+  'Joypurhat', 'Naogaon', 'Natore', 'Chapainawabganj', 'Pabna', 'Sirajganj',
+  'Gaibandha', 'Kurigram', 'Lalmonirhat', 'Nilphamari', 'Panchagarh', 'Thakurgaon',
+  'Jamalpur', 'Netrokona', 'Sherpur',
 ];
+
+// Service title suggestions by category
+const titleSuggestions: Record<string, string[]> = {
+  Agriculture: ['Power Tiller Rental', 'Seed Supply', 'Crop Harvesting', 'Soil Testing', 'Irrigation Service', 'Pest Control', 'Fertilizer Supply', 'Harvesting Machine Rental'],
+  Health: ['Mobile Health Camp', 'Blood Test Service', 'Vaccination Camp', 'Health Consultation', 'Medical Equipment Supply'],
+  Education: ['Tutoring Service', ' Coaching Center', 'Online Course', 'Skill Training', 'Career Counseling'],
+  Citizen: ['NID Service', 'Birth Certificate', 'Land Survey', 'Trade License', 'Income Certificate', 'Character Certificate'],
+  Transport: ['Auto Rickshaw', 'Truck Rental', 'Delivery Service', 'Passenger Bus', 'Cargo Service'],
+  Other: ['Tailoring Service', 'Electrician', 'Plumber', 'Carpenter', 'Photography', 'Event Management'],
+};
 
 const statusColors: Record<string, string> = {
   APPROVED: 'success', PENDING: 'warning', REJECTED: 'danger',
@@ -67,7 +85,7 @@ const regularServiceTemplates = [
 ];
 
 export default function ProviderServices() {
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
   const { addToast: toast } = useToast();
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
@@ -76,17 +94,19 @@ export default function ProviderServices() {
   const [form, setForm] = useState<ServiceForm>(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [correctingField, setCorrectingField] = useState<'title' | 'description' | null>(null);
+  const [showTitleSuggestions, setShowTitleSuggestions] = useState(false);
 
-  const isGovProvider = user?.role === 'GOV_SERVICE_PROVIDER' || user?.roles?.includes('GOV_SERVICE_PROVIDER');
+  const isGovProvider = hasRole('GOV_SERVICE_PROVIDER');
 
   useEffect(() => { fetchServices(); }, []);
 
   async function fetchServices() {
     setLoading(true);
     try {
-      const res = await api.get('/services', { params: { provider_id: user?.user_id } });
+      const res = await api.get('/services/mine');
       const data = res.data;
-      setServices(data.data?.services || data.services || (Array.isArray(data.data) ? data.data : []) || []);
+      setServices(data.data?.data || []);
     } catch { setServices([]); } finally { setLoading(false); }
   }
 
@@ -153,8 +173,42 @@ export default function ProviderServices() {
     } catch { toast('Failed to update', 'error'); }
   }
 
+  async function aiCorrectField(field: 'title' | 'description') {
+    const text = field === 'title' ? form.title : form.description;
+    if (!text.trim()) return;
+    setCorrectingField(field);
+    try {
+      const res = await api.post('/ai/correct', { text, language: 'English' });
+      if (res.data.corrected) {
+        setForm(f => field === 'title' ? { ...f, title: res.data.corrected } : { ...f, description: res.data.corrected });
+        toast('Text corrected!', 'success');
+      }
+    } catch {
+      toast('AI correction unavailable', 'error');
+    } finally {
+      setCorrectingField(null);
+    }
+  }
+
+  async function aiImproveField(field: 'title' | 'description') {
+    const text = field === 'title' ? form.title : form.description;
+    if (!text.trim()) return;
+    setCorrectingField(field);
+    try {
+      const res = await api.post('/ai/improve', { text, type: field });
+      if (res.data.improved) {
+        setForm(f => field === 'title' ? { ...f, title: res.data.improved } : { ...f, description: res.data.improved });
+        toast('Text improved!', 'success');
+      }
+    } catch {
+      toast('AI improvement unavailable', 'error');
+    } finally {
+      setCorrectingField(null);
+    }
+  }
+
   function applyGovTemplate(template: typeof govServiceTypes[0]) {
-    setForm(f => ({ ...f, title: template.title, description: template.description, price: template.price, category: 'Government' }));
+    setForm(f => ({ ...f, title: template.title, description: template.description, price: template.price, category: 'Citizen' }));
   }
 
   function applyRegularTemplate(template: typeof regularServiceTemplates[0]) {
@@ -263,16 +317,55 @@ export default function ProviderServices() {
               <button onClick={() => { setShowForm(false); setEditingId(null); }} className="text-earth-400 hover:text-earth-600"><XCircle size={20} /></button>
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
+              {/* Title with suggestions + AI */}
+              <div className="relative">
                 <label className="block text-sm font-medium text-earth-700 mb-1">Service Title *</label>
-                <input type="text" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                  className={`w-full border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-polli-500 ${errors.title ? 'border-red-300' : 'border-earth-200'}`}
-                  placeholder={isGovProvider ? 'e.g. NID Application, Birth Registration' : 'e.g. Tractor Rental, Crop Harvesting'} />
+                <div className="relative">
+                  <input type="text" value={form.title} onChange={e => { setForm(f => ({ ...f, title: e.target.value })); setShowTitleSuggestions(true); }}
+                    onFocus={() => setShowTitleSuggestions(true)}
+                    onBlur={() => setTimeout(() => setShowTitleSuggestions(false), 200)}
+                    className={`w-full border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-polli-500 pr-24 ${errors.title ? 'border-red-300' : 'border-earth-200'}`}
+                    placeholder={isGovProvider ? 'e.g. NID Application, Birth Registration' : 'e.g. Tractor Rental, Crop Harvesting'} />
+                  <div className="absolute right-2 top-1.5 flex items-center gap-1">
+                    <button type="button" onClick={() => aiCorrectField('title')} disabled={correctingField === 'title' || !form.title.trim()}
+                      className="flex items-center gap-1 px-1.5 py-1 text-[10px] text-green-600 hover:bg-green-50 rounded disabled:opacity-50" title="Fix grammar">
+                      {correctingField === 'title' ? <Loader2 size={10} className="animate-spin" /> : <CheckCircle2 size={10} />} Fix
+                    </button>
+                    <button type="button" onClick={() => aiImproveField('title')} disabled={correctingField === 'title' || !form.title.trim()}
+                      className="flex items-center gap-1 px-1.5 py-1 text-[10px] text-polli-600 hover:bg-polli-50 rounded disabled:opacity-50" title="AI improve">
+                      {correctingField === 'title' ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />} Improve
+                    </button>
+                  </div>
+                </div>
                 {errors.title && <p className="text-xs text-red-500 mt-1">{errors.title}</p>}
+                {showTitleSuggestions && !form.title && (
+                  <div className="absolute z-50 w-full mt-1 bg-white rounded-xl border border-earth-200 shadow-xl max-h-48 overflow-auto">
+                    <p className="px-3 py-1.5 text-[10px] font-bold text-polli-600 bg-polli-50">💡 Suggested titles</p>
+                    {(titleSuggestions[isGovProvider ? 'Citizen' : 'Agriculture'] || titleSuggestions.Other).map((s, i) => (
+                      <button key={i} type="button" onClick={() => { setForm(f => ({ ...f, title: s })); setShowTitleSuggestions(false); }}
+                        className="w-full text-left px-3 py-2 text-sm text-earth-700 hover:bg-polli-50 transition-colors border-b border-earth-50 last:border-0">
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
+              {/* Description with AI */}
               <div>
-                <label className="block text-sm font-medium text-earth-700 mb-1">Description *</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-sm font-medium text-earth-700">Description *</label>
+                  <div className="flex items-center gap-1">
+                    <button type="button" onClick={() => aiCorrectField('description')} disabled={correctingField === 'description' || !form.description.trim()}
+                      className="flex items-center gap-1 px-2 py-0.5 text-[10px] text-green-600 hover:bg-green-50 rounded disabled:opacity-50">
+                      {correctingField === 'description' ? <Loader2 size={10} className="animate-spin" /> : <CheckCircle2 size={10} />} Fix grammar
+                    </button>
+                    <button type="button" onClick={() => aiImproveField('description')} disabled={correctingField === 'description' || !form.description.trim()}
+                      className="flex items-center gap-1 px-2 py-0.5 text-[10px] text-polli-600 hover:bg-polli-50 rounded disabled:opacity-50">
+                      {correctingField === 'description' ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />} AI improve
+                    </button>
+                  </div>
+                </div>
                 <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={3}
                   className={`w-full border rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-polli-500 ${errors.description ? 'border-red-300' : 'border-earth-200'}`}
                   placeholder="Describe the service, required documents, processing time..." />

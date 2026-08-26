@@ -10,11 +10,12 @@ export class ComplaintRepository {
     });
   }
 
-  async findAll(options: { page: number; limit: number; status?: string; user_id?: number }) {
-    const { page, limit, status, user_id } = options;
+  async findAll(options: { page: number; limit: number; status?: string; user_id?: number; assigned_to?: number }) {
+    const { page, limit, status, user_id, assigned_to } = options;
     const where: Prisma.ComplaintWhereInput = {};
     if (status) where.status = status as any;
     if (user_id) where.user_id = user_id;
+    if (assigned_to) where.assigned_to = assigned_to;
 
     const [data, total] = await Promise.all([
       this.prisma.complaint.findMany({

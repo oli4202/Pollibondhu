@@ -27,14 +27,9 @@ export default function RoleBasedDashboard() {
   // Check by role (with legacy compatibility)
   const roles = user.roles || [user.role];
 
-  // Super Admin or ADMIN → full admin dashboard
-  if (roles.includes('SUPER_ADMIN') || roles.includes('ADMIN') || hasPermission('dashboard.super.view')) {
+  // ADMIN → full admin dashboard
+  if (roles.includes('ADMIN') || hasPermission('dashboard.admin.view')) {
     return <AdminDashboard />;
-  }
-
-  // Sub Admin → department-scoped dashboard
-  if (roles.includes('SUB_ADMIN') || hasPermission('dashboard.subadmin.view')) {
-    return <SubAdminDashboard />;
   }
 
   // Officer → assigned tasks dashboard

@@ -1,16 +1,15 @@
 /** All system roles */
 export enum Role {
-  SUPER_ADMIN = 'SUPER_ADMIN',
-  SUB_ADMIN = 'SUB_ADMIN',
-  OFFICER = 'OFFICER',
+  ADMIN = 'ADMIN',           // Full system administrator
+  OFFICER = 'OFFICER',       // Government officer
   SERVICE_PROVIDER = 'SERVICE_PROVIDER',
+  GOV_SERVICE_PROVIDER = 'GOV_SERVICE_PROVIDER',
   NGO_ADMIN = 'NGO_ADMIN',
   INSTITUTION_ADMIN = 'INSTITUTION_ADMIN',
   TEACHER = 'TEACHER',
   CITIZEN = 'CITIZEN',
   // Legacy roles (backward compatibility)
   USER = 'USER',
-  ADMIN = 'ADMIN',
   PROVIDER = 'PROVIDER',
 }
 

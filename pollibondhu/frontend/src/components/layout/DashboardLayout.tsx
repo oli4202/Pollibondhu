@@ -20,6 +20,8 @@ const sidebarItems = [
 const providerSidebarItems = [
   { to: '/provider', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/provider/services', label: 'My Services', icon: Wrench },
+  { to: '/provider/messages', label: 'Messages', icon: MessageSquare },
+  { to: '/provider/complaints', label: 'Complaints', icon: AlertTriangle },
   { to: '/village-market', label: 'Village Market', icon: Store },
 ];
 
@@ -34,19 +36,19 @@ const mobileNavItems = [
 const providerMobileNavItems = [
   { to: '/provider', label: 'Home', icon: LayoutDashboard },
   { to: '/provider/services', label: 'Services', icon: Wrench },
-  { to: '/village-market', label: 'Market', icon: Store },
-  { to: '/dashboard/messages', label: 'Messages', icon: MessageSquare },
+  { to: '/provider/complaints', label: 'Issues', icon: AlertTriangle },
+  { to: '/provider/messages', label: 'Messages', icon: MessageSquare },
   { to: '/dashboard/profile', label: 'Profile', icon: User },
 ];
 
 export default function DashboardLayout() {
-  const { user, logout } = useAuth();
+  const { user, logout, hasRole } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
-  const isProvider = user?.role === 'PROVIDER' || user?.role === 'SERVICE_PROVIDER' || user?.role === 'GOV_SERVICE_PROVIDER' || user?.roles?.includes('PROVIDER') || user?.roles?.includes('GOV_SERVICE_PROVIDER');
+  const isProvider = hasRole('PROVIDER', 'SERVICE_PROVIDER', 'GOV_SERVICE_PROVIDER');
   const currentSidebarItems = isProvider ? providerSidebarItems : sidebarItems;
   const currentMobileNavItems = isProvider ? providerMobileNavItems : mobileNavItems;
 

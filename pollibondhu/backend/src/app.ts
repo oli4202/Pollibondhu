@@ -7,6 +7,9 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { errorMiddleware } from './middleware/error.middleware';
 import { logger } from './patterns/singleton/Logger';
+import { prisma } from './patterns/singleton/DatabaseManager';
+import { verifyAccessToken } from './utils/jwt';
+import { setIO } from './utils/socket';
 import path from 'path';
 import authRoutes from './routes/auth.routes';
 import userRoutes from './routes/user.routes';
@@ -23,6 +26,7 @@ import priceAlertRoutes from './routes/priceAlert.routes';
 import ngoRoutes from './routes/ngo.routes';
 import notificationRoutes from './routes/notification.routes';
 import chatRoutes from './routes/chat.routes';
+import communityRoutes from './routes/community.routes';
 
 const app = express();
 
@@ -31,12 +35,26 @@ app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:5173', cred
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-const limiter = rateLimit({
+// General API limiter — generous allowance so background polling, chat and
+// uploads don't exhaust the budget and block real user actions with 429s.
+const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 1000,
+  standardHeaders: true,
+  legacyHeaders: false,
   message: { success: false, error: 'Too many requests, please try again later.' },
 });
-app.use('/api/', limiter);
+app.use('/api/', apiLimiter);
+
+// Strict limiter only for auth endpoints (brute-force protection).
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, error: 'Too many login attempts, please try again later.' },
+});
+app.use('/api/auth', authLimiter);
 
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
@@ -60,6 +78,7 @@ app.use('/api/listings', listingRoutes);
 app.use('/api/price-alerts', priceAlertRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/community', communityRoutes);
 
 app.use(errorMiddleware);
 app.use((req, res) => {
@@ -77,18 +96,37 @@ export const io = new Server(server, {
   },
 });
 
-io.on('connection', (socket) => {
-  console.log('A user connected:', socket.id);
+// Register io with singleton so route handlers can access it without circular deps
+setIO(io);
 
-  // User joins their personal notification room
-  socket.on('join_user', (userId) => {
-    socket.join(`user_${userId}`);
-    console.log(`Socket ${socket.id} joined user room ${userId}`);
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token;
+  if (!token) {
+    return next(new Error('Authentication required: no token provided'));
+  }
+  try {
+    const payload = verifyAccessToken(token);
+    socket.data.user = payload;
+    next();
+  } catch {
+    next(new Error('Authentication failed: invalid or expired token'));
+  }
+});
+
+io.on('connection', (socket) => {
+  const user = socket.data.user;
+  logger.info(`User ${user.user_id} connected (socket ${socket.id})`);
+
+  // Auto-join personal notification room
+  socket.join(`user_${user.user_id}`);
+
+  // Join community room for real-time posts
+  socket.on('community:join', () => {
+    socket.join('community');
   });
 
   socket.on('join_department', (departmentId) => {
     socket.join(`dept_${departmentId}`);
-    console.log(`Socket ${socket.id} joined department ${departmentId}`);
   });
 
   // ============================================
@@ -109,11 +147,17 @@ io.on('connection', (socket) => {
   // Send a chat message
   socket.on('chat:message', async (data) => {
     try {
-      const { conversationId, senderId, content, messageType, mediaUrl, mediaDuration, replyToId } = data;
+      const senderId = user.user_id;
+      const { conversationId, content, messageType, mediaUrl, mediaDuration, replyToId } = data;
 
-      // Save to database
-      const { PrismaClient } = require('@prisma/client');
-      const prisma = new PrismaClient();
+      // Verify membership
+      const member = await prisma.chatMember.findUnique({
+        where: { conversation_id_user_id: { conversation_id: conversationId, user_id: senderId } },
+      });
+      if (!member) {
+        socket.emit('chat:error', { error: 'Not a member of this conversation' });
+        return;
+      }
 
       const message = await prisma.chatMessage.create({
         data: {
@@ -136,9 +180,7 @@ io.on('connection', (socket) => {
         data: { updated_at: new Date() },
       });
 
-      await prisma.$disconnect();
-
-      // Broadcast to all members in the room
+      // Broadcast to all members in the room (sender included for delivery confirmation)
       io.to(`chat_${conversationId}`).emit('chat:message', message);
     } catch (err: any) {
       console.error('Chat message error:', err.message);
@@ -149,10 +191,53 @@ io.on('connection', (socket) => {
   // Typing indicator
   socket.on('chat:typing', (data) => {
     socket.to(`chat_${data.conversationId}`).emit('chat:typing', {
-      userId: data.userId,
+      userId: user.user_id,
       conversationId: data.conversationId,
       isTyping: data.isTyping,
     });
+  });
+
+  // Mark messages as read and broadcast read receipts
+  socket.on('chat:read', async (data) => {
+    try {
+      const { conversationId } = data;
+      const now = new Date();
+
+      // Update last_read_at
+      await prisma.chatMember.update({
+        where: { conversation_id_user_id: { conversation_id: conversationId, user_id: user.user_id } },
+        data: { last_read_at: now },
+      }).catch(() => {});
+
+      // Create MessageRead records for unread messages
+      const unreadMessages = await prisma.chatMessage.findMany({
+        where: {
+          conversation_id: conversationId,
+          sender_id: { not: user.user_id },
+          is_deleted: false,
+          reads: { none: { user_id: user.user_id } },
+        },
+        select: { message_id: true },
+      });
+
+      if (unreadMessages.length > 0) {
+        await prisma.messageRead.createMany({
+          data: unreadMessages.map((msg) => ({
+            message_id: msg.message_id,
+            user_id: user.user_id,
+          })),
+        }).catch(() => {}); // Ignore duplicate key errors
+      }
+
+      // Broadcast read receipt to other members
+      socket.to(`chat_${conversationId}`).emit('chat:read', {
+        userId: user.user_id,
+        conversationId,
+        readAt: now,
+      });
+    } catch (err: any) {
+      console.error('Chat read error:', err.message);
+    }
   });
 
   // Voice message streaming (sends audio chunks)
@@ -163,13 +248,21 @@ io.on('connection', (socket) => {
   // Voice message complete
   socket.on('chat:voice_complete', async (data) => {
     try {
-      const { PrismaClient } = require('@prisma/client');
-      const prisma = new PrismaClient();
+      const senderId = user.user_id;
+
+      // Verify membership
+      const member = await prisma.chatMember.findUnique({
+        where: { conversation_id_user_id: { conversation_id: data.conversationId, user_id: senderId } },
+      });
+      if (!member) {
+        socket.emit('chat:error', { error: 'Not a member of this conversation' });
+        return;
+      }
 
       const message = await prisma.chatMessage.create({
         data: {
           conversation_id: data.conversationId,
-          sender_id: data.senderId,
+          sender_id: senderId,
           message_type: 'VOICE',
           media_url: data.mediaUrl,
           media_duration: data.duration || null,
@@ -184,8 +277,6 @@ io.on('connection', (socket) => {
         data: { updated_at: new Date() },
       });
 
-      await prisma.$disconnect();
-
       io.to(`chat_${data.conversationId}`).emit('chat:message', message);
     } catch (err: any) {
       console.error('Voice message error:', err.message);
@@ -195,13 +286,21 @@ io.on('connection', (socket) => {
   // Channel post broadcast
   socket.on('channel:post', async (data) => {
     try {
-      const { PrismaClient } = require('@prisma/client');
-      const prisma = new PrismaClient();
+      const authorId = user.user_id;
+
+      // Verify membership
+      const member = await prisma.chatMember.findUnique({
+        where: { conversation_id_user_id: { conversation_id: data.conversationId, user_id: authorId } },
+      });
+      if (!member) {
+        socket.emit('chat:error', { error: 'Not a member of this channel' });
+        return;
+      }
 
       const post = await prisma.channelPost.create({
         data: {
           conversation_id: data.conversationId,
-          author_id: data.authorId,
+          author_id: authorId,
           title: data.title || null,
           content: data.content,
           post_type: data.postType || 'UPDATE',
@@ -218,8 +317,6 @@ io.on('connection', (socket) => {
         data: { updated_at: new Date() },
       });
 
-      await prisma.$disconnect();
-
       io.to(`chat_${data.conversationId}`).emit('channel:post', post);
     } catch (err: any) {
       console.error('Channel post error:', err.message);
@@ -229,11 +326,8 @@ io.on('connection', (socket) => {
   // Channel comment
   socket.on('channel:comment', async (data) => {
     try {
-      const { PrismaClient } = require('@prisma/client');
-      const prisma = new PrismaClient();
-
       const comment = await prisma.channelComment.create({
-        data: { post_id: data.postId, user_id: data.userId, content: data.content },
+        data: { post_id: data.postId, user_id: user.user_id, content: data.content },
         include: { user: { select: { full_name: true, avatar_url: true } } },
       });
 
@@ -241,8 +335,6 @@ io.on('connection', (socket) => {
         where: { post_id: data.postId },
         data: { comments_count: { increment: 1 } },
       });
-
-      await prisma.$disconnect();
 
       io.to(`chat_${data.conversationId}`).emit('channel:comment', { ...comment, conversationId: data.conversationId });
     } catch (err: any) {
@@ -255,12 +347,8 @@ io.on('connection', (socket) => {
     socket.join(`chat_${conversationId}`);
   });
 
-  socket.on('send_message', (data) => {
-    io.emit('receive_message', data);
-  });
-
   socket.on('disconnect', () => {
-    console.log('User disconnected:', socket.id);
+    logger.info(`User ${user.user_id} disconnected (socket ${socket.id})`);
   });
 });
 

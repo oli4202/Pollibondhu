@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createService, listServices, getService, updateService, deleteService, approveService } from '../controllers/service.controller';
+import { createService, listServices, listMyServices, getService, updateService, deleteService, approveService } from '../controllers/service.controller';
 import { authMiddleware, requirePermission } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validate.middleware';
 import { serviceSchema } from '../validators';
@@ -8,6 +8,7 @@ const router = Router();
 
 // Public endpoints
 router.get('/', listServices);
+router.get('/mine', authMiddleware, requirePermission('service.view'), listMyServices);
 router.get('/:id', getService);
 
 // Authenticated endpoints with permission checks

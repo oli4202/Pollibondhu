@@ -42,7 +42,8 @@ export async function adminListServices(req: AuthenticatedRequest, res: Response
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     const status = req.query.status as string;
-    const result = await adminService.listServices({ page, limit, status });
+    const search = req.query.search as string;
+    const result = await adminService.listServices({ page, limit, status, search });
     sendSuccess(res, result);
   } catch (err: any) {
     sendError(res, err.message, 400);

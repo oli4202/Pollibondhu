@@ -30,7 +30,7 @@ interface UserForm {
 const emptyForm: UserForm = { email: '', password: '', full_name: '', phone: '', role: 'CITIZEN', district: '' };
 
 const roleOptions = [
-  'CITIZEN', 'SERVICE_PROVIDER', 'GOV_SERVICE_PROVIDER', 'OFFICER', 'SUB_ADMIN', 'ADMIN', 'SUPER_ADMIN',
+  'CITIZEN', 'SERVICE_PROVIDER', 'GOV_SERVICE_PROVIDER', 'OFFICER', 'ADMIN',
   'NGO_ADMIN', 'INSTITUTION_ADMIN', 'TEACHER',
 ];
 
@@ -126,8 +126,9 @@ export default function UserManagement() {
 
   const roleBadge = (role: string) => {
     const colors: Record<string, string> = {
-      SUPER_ADMIN: 'danger', ADMIN: 'danger', SUB_ADMIN: 'warning', OFFICER: 'info',
+      ADMIN: 'danger', OFFICER: 'info',
       SERVICE_PROVIDER: 'success', GOV_SERVICE_PROVIDER: 'success', CITIZEN: 'default',
+      NGO_ADMIN: 'warning', INSTITUTION_ADMIN: 'warning', TEACHER: 'info',
     };
     return <Badge variant={(colors[role] as any) || 'default'}>{role}</Badge>;
   };

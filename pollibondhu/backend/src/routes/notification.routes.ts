@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { authMiddleware } from '../middleware/auth.middleware';
 import { sendSuccess, sendError } from '../utils/apiResponse';
 import { prisma } from '../patterns/singleton/DatabaseManager';
+import { getIO } from '../utils/socket';
 
 const router = Router();
 
@@ -17,8 +18,7 @@ function pushNotification(userId: number, notification: any) {
   }
   // Socket.io push
   try {
-    const { io } = require('../app');
-    io?.to(`user_${userId}`).emit('notification', notification);
+    getIO()?.to(`user_${userId}`).emit('notification', notification);
   } catch {}
 }
 

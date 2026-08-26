@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, CheckCircle, FileText, MessageSquare, AlertTriangle, X, CheckCheck } from 'lucide-react';
+import { Bell, CheckCircle, FileText, MessageSquare, AlertTriangle, X, CheckCheck, Users } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import api from '@/utils/api';
+import { io as connectSocket, Socket } from 'socket.io-client';
 
 interface Notification {
   notification_id: number;
@@ -19,6 +20,7 @@ const typeConfig: Record<string, { icon: typeof Bell; color: string }> = {
   COMPLAINT: { icon: AlertTriangle, color: 'text-amber-600 bg-amber-50' },
   MESSAGE: { icon: MessageSquare, color: 'text-blue-600 bg-blue-50' },
   SYSTEM: { icon: CheckCircle, color: 'text-purple-600 bg-purple-50' },
+  COMMUNITY_POST: { icon: Users, color: 'text-emerald-600 bg-emerald-50' },
 };
 
 function timeAgo(dateStr: string) {
@@ -39,6 +41,7 @@ export default function NotificationBell() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const socketRef = useRef<Socket | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -64,9 +67,9 @@ export default function NotificationBell() {
     fetchNotifications();
 
     // Connect to SSE
-    const token = localStorage.getItem('token');
+    const sseToken = localStorage.getItem('token');
     const es = new EventSource(
-      `${api.defaults.baseURL}/notifications/stream${token ? `?token=${token}` : ''}`,
+      `${api.defaults.baseURL}/notifications/stream${sseToken ? `?token=${sseToken}` : ''}`,
       { withCredentials: true }
     );
 
@@ -92,8 +95,34 @@ export default function NotificationBell() {
 
     eventSourceRef.current = es;
 
+    // ---- Socket.io real-time listener ----
+    const socketToken = localStorage.getItem('accessToken');
+    if (socketToken) {
+      const socket = connectSocket(
+        api.defaults.baseURL?.replace('/api', '') || 'http://localhost:4000',
+        { transports: ['websocket', 'polling'], auth: { token: socketToken } }
+      );
+      socketRef.current = socket;
+
+      socket.on('notification', (notif: any) => {
+        // Synthesize a local notification object with a temporary id
+        const synth: Notification = {
+          notification_id: notif.notification_id ?? Date.now(),
+          type: notif.type ?? 'IN_APP',
+          title: notif.title,
+          message: notif.message,
+          is_read: false,
+          created_at: notif.created_at ?? new Date().toISOString(),
+        };
+        setNotifications(prev => [synth, ...prev].slice(0, 20));
+        setUnreadCount(prev => prev + 1);
+      });
+    }
+
     return () => {
       es.close();
+      socketRef.current?.disconnect();
+      socketRef.current = null;
       if (pollRef.current) {
         clearInterval(pollRef.current);
         pollRef.current = null;
@@ -203,6 +232,7 @@ export default function NotificationBell() {
                       if (n.type === 'APPLICATION') navigate('/dashboard/applications');
                       else if (n.type === 'COMPLAINT') navigate('/dashboard/complaints');
                       else if (n.type === 'MESSAGE') navigate('/dashboard/messages');
+                      else if (n.type === 'COMMUNITY_POST') navigate('/community');
                     }}
                     className={`w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-earth-50 transition-colors border-b border-earth-50 last:border-0 ${
                       !n.is_read ? 'bg-polli-50/30' : ''

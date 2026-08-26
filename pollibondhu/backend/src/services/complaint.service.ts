@@ -19,8 +19,17 @@ export class ComplaintService {
     });
   }
 
-  async updateStatus(complaint_id: number, status: string, admin_id: number, notes?: string) {
+  async updateStatus(complaint_id: number, status: string, admin_id: number, roles: string[], notes?: string) {
     logger.info(`Admin ${admin_id} updating complaint ${complaint_id} to ${status}`);
+    const existing = await this.repo.findById(complaint_id);
+    if (!existing) throw new Error('Complaint not found');
+    const isAdministrator = roles.some((role) => ['ADMIN', 'SUPER_ADMIN', 'SUB_ADMIN'].includes(role));
+    if (!isAdministrator && existing.assigned_to !== admin_id) {
+      throw new Error('Only the assigned officer can update this complaint');
+    }
+    if (['RESOLVED', 'REJECTED'].includes(status) && !notes?.trim()) {
+      throw new Error('Resolution notes are required when resolving or rejecting a complaint');
+    }
     const complaint = await this.repo.update(complaint_id, {
       status: status as any,
       reviewer: { connect: { user_id: admin_id } },

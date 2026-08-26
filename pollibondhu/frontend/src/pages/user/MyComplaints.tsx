@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AlertTriangle, Plus, ChevronRight, X, MapPin, Sparkles, Bot } from 'lucide-react';
+import { AlertTriangle, Plus, ChevronRight, X, MapPin, Sparkles, Bot, Loader2, CheckCircle2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/Card';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Badge } from '@/components/ui/Badge';
@@ -73,16 +73,51 @@ export default function MyComplaints() {
   const [form, setForm] = useState({
     category: '', subject: '', description: '', priority: 'MEDIUM', location: '',
   });
+  const [correctingField, setCorrectingField] = useState<'subject' | 'description' | null>(null);
 
   useEffect(() => {
     api.get('/complaints')
       .then(res => {
         const data = res.data;
-        setComplaints(data.data || data.complaints || (Array.isArray(data) ? data : []));
+        setComplaints(data.data?.data || data.complaints || (Array.isArray(data) ? data : []));
       })
       .catch(() => setComplaints([]))
       .finally(() => setLoading(false));
   }, []);
+
+  async function aiCorrectField(field: 'subject' | 'description') {
+    const text = field === 'subject' ? form.subject : form.description;
+    if (!text.trim()) return;
+    setCorrectingField(field);
+    try {
+      const res = await api.post('/ai/correct', { text, language: 'English' });
+      if (res.data.corrected) {
+        setForm(f => field === 'subject' ? { ...f, subject: res.data.corrected } : { ...f, description: res.data.corrected });
+        addToast('Text corrected!', 'success');
+      }
+    } catch {
+      addToast('AI correction unavailable', 'error');
+    } finally {
+      setCorrectingField(null);
+    }
+  }
+
+  async function aiImproveField(field: 'subject' | 'description') {
+    const text = field === 'subject' ? form.subject : form.description;
+    if (!text.trim()) return;
+    setCorrectingField(field);
+    try {
+      const res = await api.post('/ai/improve', { text, type: 'complaint' });
+      if (res.data.improved) {
+        setForm(f => field === 'subject' ? { ...f, subject: res.data.improved } : { ...f, description: res.data.improved });
+        addToast('Text improved!', 'success');
+      }
+    } catch {
+      addToast('AI improvement unavailable', 'error');
+    } finally {
+      setCorrectingField(null);
+    }
+  }
 
   async function handleSubmit() {
     if (!form.category || !form.subject || !form.description) {
@@ -102,7 +137,7 @@ export default function MyComplaints() {
       setForm({ category: '', subject: '', description: '', priority: 'MEDIUM', location: '' });
       // Refresh
       const res = await api.get('/complaints');
-      setComplaints(res.data.data || []);
+      setComplaints(res.data.data?.data || []);
     } catch (err: any) {
       addToast(err.response?.data?.error || 'Failed to submit complaint', 'error');
     } finally { setSending(false); }
@@ -145,9 +180,21 @@ export default function MyComplaints() {
               </div>
             </div>
 
-            {/* Subject */}
+            {/* Subject with AI correction */}
             <div>
-              <label className="block text-sm font-medium text-earth-700 mb-1">Subject *</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-sm font-medium text-earth-700">Subject *</label>
+                <div className="flex items-center gap-1">
+                  <button type="button" onClick={() => aiCorrectField('subject')} disabled={correctingField === 'subject' || !form.subject.trim()}
+                    className="flex items-center gap-1 px-2 py-0.5 text-[10px] text-green-600 hover:bg-green-50 rounded disabled:opacity-50">
+                    {correctingField === 'subject' ? <Loader2 size={10} className="animate-spin" /> : <CheckCircle2 size={10} />} Fix grammar
+                  </button>
+                  <button type="button" onClick={() => aiImproveField('subject')} disabled={correctingField === 'subject' || !form.subject.trim()}
+                    className="flex items-center gap-1 px-2 py-0.5 text-[10px] text-polli-600 hover:bg-polli-50 rounded disabled:opacity-50">
+                    {correctingField === 'subject' ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />} AI improve
+                  </button>
+                </div>
+              </div>
               <input type="text" value={form.subject} onChange={e => setForm(f => ({ ...f, subject: e.target.value }))}
                 className="w-full border border-earth-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-polli-500"
                 placeholder="Brief summary of the issue" />
@@ -187,9 +234,21 @@ export default function MyComplaints() {
               </div>
             </div>
 
-            {/* Description with AI */}
+            {/* Description with AI correction + suggestions */}
             <div>
-              <label className="block text-sm font-medium text-earth-700 mb-1">Description *</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-sm font-medium text-earth-700">Description *</label>
+                <div className="flex items-center gap-1">
+                  <button type="button" onClick={() => aiCorrectField('description')} disabled={correctingField === 'description' || !form.description.trim()}
+                    className="flex items-center gap-1 px-2 py-0.5 text-[10px] text-green-600 hover:bg-green-50 rounded disabled:opacity-50">
+                    {correctingField === 'description' ? <Loader2 size={10} className="animate-spin" /> : <CheckCircle2 size={10} />} Fix grammar
+                  </button>
+                  <button type="button" onClick={() => aiImproveField('description')} disabled={correctingField === 'description' || !form.description.trim()}
+                    className="flex items-center gap-1 px-2 py-0.5 text-[10px] text-polli-600 hover:bg-polli-50 rounded disabled:opacity-50">
+                    {correctingField === 'description' ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />} AI improve
+                  </button>
+                </div>
+              </div>
               <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} rows={4}
                 className="w-full border border-earth-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-polli-500 resize-none"
                 placeholder="Describe the issue in detail..." />

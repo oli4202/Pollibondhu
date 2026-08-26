@@ -12,8 +12,19 @@ export class ServiceService {
 
   async createService(data: any, provider_id: number) {
     logger.info(`Creating service by provider ${provider_id}`);
+    const { category, ...serviceData } = data;
+    let category_id = serviceData.category_id;
+    if (category) {
+      const categoryName = category === 'Government' ? 'Citizen' : category;
+      const matchedCategory = await this.prisma.category.findFirst({
+        where: { name: categoryName, type: 'SERVICE', is_active: true },
+      });
+      if (!matchedCategory) throw new Error('Selected service category is unavailable');
+      category_id = matchedCategory.category_id;
+    }
     const service = await this.repo.create({
-      ...data,
+      ...serviceData,
+      ...(category_id ? { category: { connect: { category_id } } } : {}),
       provider: { connect: { user_id: provider_id } },
       status: 'PENDING',
     });
@@ -49,7 +60,24 @@ export class ServiceService {
     if (user_role !== 'ADMIN' && existing.provider_id !== user_id) {
       throw new Error('Unauthorized to update this service');
     }
-    return this.repo.update(service_id, data);
+    const { category, ...rawData } = data;
+    const allowedFields = ['title', 'description', 'price', 'location', 'district', 'category_id', 'is_available'];
+    const update: Record<string, any> = Object.fromEntries(Object.entries(rawData).filter(([key]) => allowedFields.includes(key)));
+    if (category) {
+      const matchedCategory = await this.prisma.category.findFirst({
+        where: { name: category, type: 'SERVICE', is_active: true },
+      });
+      if (!matchedCategory) throw new Error('Selected service category is unavailable');
+      update.category = { connect: { category_id: matchedCategory.category_id } };
+    }
+    if (Object.keys(update).length === 0) throw new Error('No valid service fields supplied');
+
+    // Changes to what is being offered need a fresh review. Toggling visibility does not.
+    const requiresReview = user_role !== 'ADMIN' && ['title', 'description', 'price', 'location', 'district', 'category_id', 'category']
+      .some((field) => field in update);
+    if (requiresReview) update.status = 'PENDING';
+
+    return this.repo.update(service_id, update);
   }
 
   async deleteService(service_id: number, user_id: number, user_role: string) {

@@ -16,8 +16,9 @@ const ALLOWED_TYPES = [
   'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ];
 
-// Max file size: 5MB
+// Max file size: 5MB (general) / 10MB (chat)
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
+const CHAT_MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -46,4 +47,42 @@ export const upload = multer({
   storage,
   fileFilter,
   limits: { fileSize: MAX_FILE_SIZE },
+});
+
+// Chat-specific upload: allows images, documents, audio, and video
+const CHAT_ALLOWED_TYPES = [
+  'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+  'application/pdf',
+  'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'audio/mpeg', 'audio/webm', 'audio/ogg', 'audio/wav', 'audio/mp4',
+  'video/mp4', 'video/webm', 'video/ogg',
+];
+
+const chatFileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  if (CHAT_ALLOWED_TYPES.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error(`File type ${file.mimetype} is not allowed for chat uploads.`));
+  }
+};
+
+const chatStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const subDir = path.join(UPLOAD_DIR, 'chat');
+    if (!fs.existsSync(subDir)) {
+      fs.mkdirSync(subDir, { recursive: true });
+    }
+    cb(null, subDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    const ext = path.extname(file.originalname);
+    cb(null, `chat-${uniqueSuffix}${ext}`);
+  },
+});
+
+export const chatUpload = multer({
+  storage: chatStorage,
+  fileFilter: chatFileFilter,
+  limits: { fileSize: CHAT_MAX_FILE_SIZE },
 });

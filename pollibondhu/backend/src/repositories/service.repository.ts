@@ -10,11 +10,18 @@ export class ServiceRepository {
     });
   }
 
-  async findAll(options: { page: number; limit: number; status?: string; provider_id?: number }) {
-    const { page, limit, status, provider_id } = options;
+  async findAll(options: { page: number; limit: number; status?: string; provider_id?: number; search?: string; availableOnly?: boolean }) {
+    const { page, limit, status, provider_id, search, availableOnly } = options;
     const where: Prisma.ServiceWhereInput = {};
     if (status) where.status = status as any;
     if (provider_id) where.provider_id = provider_id;
+    if (availableOnly) where.is_available = true;
+    if (search?.trim()) {
+      where.OR = [
+        { title: { contains: search.trim() } },
+        { description: { contains: search.trim() } },
+      ];
+    }
 
     const [data, total] = await Promise.all([
       this.prisma.service.findMany({

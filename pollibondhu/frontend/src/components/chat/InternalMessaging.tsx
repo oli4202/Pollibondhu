@@ -20,13 +20,17 @@ export default function InternalMessaging() {
 
   useEffect(() => {
     // Connect to Socket.io server
+    const token = localStorage.getItem('accessToken');
+    if (!token || !user) return;
+
     const newSocket = io(import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:4000', {
-      withCredentials: true,
+      transports: ['websocket', 'polling'],
+      auth: { token },
     });
     setSocket(newSocket);
 
     // If user belongs to a department, join that room
-    if (user?.assignments?.[0]?.location?.department) {
+    if (user.assignments?.[0]?.location?.department) {
       newSocket.emit('join_department', user.assignments[0].location.department);
     }
 

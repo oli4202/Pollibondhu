@@ -20,8 +20,14 @@ export async function listComplaints(req: AuthenticatedRequest, res: Response): 
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     const status = req.query.status as string;
-    const user_id = req.user!.role === 'ADMIN' ? undefined : req.user!.user_id;
-    const result = await complaintService.listComplaints({ page, limit, status, user_id });
+    const roles = req.user!.roles;
+    const isAdministrator = roles.some((role) => ['ADMIN', 'SUPER_ADMIN', 'SUB_ADMIN'].includes(role));
+    const isOfficer = roles.includes('OFFICER');
+    const result = await complaintService.listComplaints({
+      page, limit, status,
+      user_id: isAdministrator || isOfficer ? undefined : req.user!.user_id,
+      assigned_to: isOfficer && !isAdministrator ? req.user!.user_id : undefined,
+    });
     sendSuccess(res, result);
   } catch (err: any) {
     sendError(res, err.message, 400);
@@ -32,7 +38,7 @@ export async function updateComplaintStatus(req: AuthenticatedRequest, res: Resp
   try {
     const complaint_id = parseInt(req.params.id);
     const { status, notes } = req.body;
-    const result = await complaintService.updateStatus(complaint_id, status, req.user!.user_id, notes);
+    const result = await complaintService.updateStatus(complaint_id, status, req.user!.user_id, req.user!.roles, notes);
     sendSuccess(res, result, 'Complaint status updated');
   } catch (err: any) {
     sendError(res, err.message, 400);

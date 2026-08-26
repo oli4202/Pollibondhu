@@ -31,11 +31,11 @@ const govServiceTypes = [
 ];
 
 export default function ProviderDashboard() {
-  const { user } = useAuth();
+  const { user, hasRole } = useAuth();
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const isGovProvider = user?.role === 'GOV_SERVICE_PROVIDER' || user?.roles?.includes('GOV_SERVICE_PROVIDER');
+  const isGovProvider = hasRole('GOV_SERVICE_PROVIDER');
 
   useEffect(() => {
     api.get('/services', { params: { provider_id: user?.user_id } })

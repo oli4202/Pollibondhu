@@ -8,7 +8,7 @@ import AiChatWidget from '@/components/chat/AiChatWidget';
 import AiInstantHelp from '@/components/ai/AiInstantHelp';
 
 export default function PublicLayout() {
-  const { user, logout } = useAuth();
+  const { user, logout, hasRole } = useAuth();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -58,9 +58,9 @@ export default function PublicLayout() {
               <>
                 <Link
                   to={
-                    (user.roles?.includes('SUPER_ADMIN') || user.roles?.includes('SUB_ADMIN') || user.roles?.includes('OFFICER') || user.role === 'ADMIN' || user.role === 'SUPER_ADMIN')
+                    hasRole('ADMIN', 'OFFICER')
                       ? '/admin'
-                      : user.role === 'PROVIDER' || user.role === 'SERVICE_PROVIDER'
+                      : hasRole('PROVIDER', 'SERVICE_PROVIDER', 'GOV_SERVICE_PROVIDER')
                       ? '/provider'
                       : '/dashboard'
                   }
@@ -117,9 +117,9 @@ export default function PublicLayout() {
                   <>
                     <Link
                       to={
-                        (user.roles?.includes('SUPER_ADMIN') || user.roles?.includes('SUB_ADMIN') || user.role === 'ADMIN' || user.role === 'SUPER_ADMIN')
+                        hasRole('ADMIN', 'OFFICER')
                           ? '/admin'
-                          : user.role === 'PROVIDER' || user.role === 'SERVICE_PROVIDER'
+                          : hasRole('PROVIDER', 'SERVICE_PROVIDER', 'GOV_SERVICE_PROVIDER')
                           ? '/provider'
                           : '/dashboard'
                       }

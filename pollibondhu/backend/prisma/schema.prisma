@@ -58,6 +58,7 @@ model User {
   votes           Vote[]
   complaints      Complaint[]
   forum_posts     ForumPost[]
+  forum_replies   ForumReply[]
   user_activities UserActivity[]
   expert_bookings ExpertBooking[]
   saved_services  SavedService[]
@@ -65,6 +66,7 @@ model User {
   updated_weather Weather[]
   notifications   Notification[]
   refresh_tokens  RefreshToken[]
+  password_reset_tokens PasswordResetToken[]
 
   // Provider-specific (when role = PROVIDER)
   services Service[]
@@ -349,6 +351,7 @@ model ForumPost {
   post_id     Int      @id @default(autoincrement())
   user_id     Int
   category_id Int?
+  category    String   @default("Community") // String category for community posts
   title       String
   content     String
   tags        String   @default("[]")
@@ -360,9 +363,24 @@ model ForumPost {
 
   // ERD: USER creates FORUM_POST
   user     User      @relation(fields: [user_id], references: [user_id])
-  category Category? @relation(fields: [category_id], references: [category_id])
+  replies  ForumReply[]
+  categoryRelation Category? @relation(fields: [category_id], references: [category_id])
 
   @@map("forum_posts")
+}
+
+model ForumReply {
+  reply_id   Int      @id @default(autoincrement())
+  post_id    Int
+  user_id    Int
+  content    String
+  created_at DateTime @default(now())
+
+  post ForumPost @relation(fields: [post_id], references: [post_id], onDelete: Cascade)
+  user User      @relation(fields: [user_id], references: [user_id])
+
+  @@index([post_id, created_at])
+  @@map("forum_replies")
 }
 
 model UserActivity {
@@ -504,6 +522,20 @@ model RefreshToken {
   @@map("refresh_tokens")
 }
 
+model PasswordResetToken {
+  reset_token_id Int       @id @default(autoincrement())
+  user_id        Int
+  token_hash     String
+  expires_at     DateTime
+  used_at        DateTime?
+  created_at     DateTime  @default(now())
+
+  user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
+
+  @@index([user_id, expires_at])
+  @@map("password_reset_tokens")
+}
+
 // ============================================
 // NEW SMART VILLAGE MODULES
 // ============================================
@@ -574,12 +606,13 @@ model ChatConversation {
 }
 
 model ChatMember {
-  id              Int      @id @default(autoincrement())
+  id              Int       @id @default(autoincrement())
   conversation_id Int
   user_id         Int
-  role            String   @default("MEMBER") // OWNER, ADMIN, MODERATOR, MEMBER
-  is_muted        Boolean  @default(false)
-  joined_at       DateTime @default(now())
+  role            String    @default("MEMBER") // OWNER, ADMIN, MODERATOR, MEMBER
+  is_muted        Boolean   @default(false)
+  last_read_at    DateTime? // When the user last read messages in this conversation
+  joined_at       DateTime  @default(now())
 
   conversation ChatConversation @relation(fields: [conversation_id], references: [conversation_id], onDelete: Cascade)
   user         User             @relation(fields: [user_id], references: [user_id])

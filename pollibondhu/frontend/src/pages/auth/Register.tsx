@@ -19,9 +19,21 @@ export default function Register() {
     e.preventDefault();
     setLoading(true);
     try {
-      await register(form);
+      const submitData = { ...form, phone: form.phone || undefined };
+      const loggedInUser = await register(submitData);
       addToast('Account created successfully');
-      navigate('/dashboard');
+      
+      const roles = loggedInUser?.roles || [];
+      const role = loggedInUser?.role;
+      const allRoles = [...new Set([...roles, role].filter(Boolean))];
+      
+      if (allRoles.includes('ADMIN') || allRoles.includes('OFFICER')) {
+        navigate('/admin');
+      } else if (allRoles.some(r => ['PROVIDER', 'SERVICE_PROVIDER', 'GOV_SERVICE_PROVIDER'].includes(r))) {
+        navigate('/provider');
+      } else {
+        navigate('/dashboard');
+      }
     } catch {
       addToast('Registration failed', 'error');
     } finally {

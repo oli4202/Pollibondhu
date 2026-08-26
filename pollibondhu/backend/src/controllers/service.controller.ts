@@ -38,7 +38,21 @@ export async function listServices(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const result = await serviceService.listServices({ page, limit, status, provider_id });
+    // The public catalogue must never expose unapproved or hidden services.
+    const result = await serviceService.listServices({
+      page, limit, status: status || 'APPROVED', provider_id, availableOnly: !provider_id,
+    });
+    sendSuccess(res, result);
+  } catch (err: any) {
+    sendError(res, err.message, 400);
+  }
+}
+
+export async function listMyServices(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const result = await serviceService.listServices({ page, limit, provider_id: req.user!.user_id });
     sendSuccess(res, result);
   } catch (err: any) {
     sendError(res, err.message, 400);

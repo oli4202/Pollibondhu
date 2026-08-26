@@ -30,14 +30,14 @@ export interface TokenPayload {
 
 /** All system roles */
 export type SystemRole =
-  | 'SUPER_ADMIN'
-  | 'SUB_ADMIN'
-  | 'OFFICER'
-  | 'SERVICE_PROVIDER'
-  | 'NGO_ADMIN'
-  | 'INSTITUTION_ADMIN'
-  | 'TEACHER'
-  | 'CITIZEN';
+  | 'ADMIN'              // Full system administrator
+  | 'OFFICER'            // Government officer
+  | 'SERVICE_PROVIDER'   // Service provider
+  | 'GOV_SERVICE_PROVIDER' // Government service provider
+  | 'NGO_ADMIN'          // NGO administrator
+  | 'INSTITUTION_ADMIN'  // Educational institution admin
+  | 'TEACHER'            // Teacher
+  | 'CITIZEN';           // Regular citizen
 
 /** Permission modules */
 export type PermissionModule =

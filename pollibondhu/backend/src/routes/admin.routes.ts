@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { getDashboardStats, getWeeklyStats, adminListUsers, adminListServices, adminListComplaints } from '../controllers/admin.controller';
-import { authMiddleware, requirePermission } from '../middleware/auth.middleware';
+import { authMiddleware, requirePermission, requireAnyPermission } from '../middleware/auth.middleware';
 import { sendSuccess, sendError } from '../utils/apiResponse';
 import { prisma } from '../patterns/singleton/DatabaseManager';
 import { appEventSubject } from '../patterns/observer/NotificationSubject';
@@ -8,8 +8,8 @@ import { appEventSubject } from '../patterns/observer/NotificationSubject';
 const router = Router();
 
 // Dashboard — requires dashboard permission
-router.get('/dashboard', authMiddleware, requirePermission('dashboard.super.view', 'dashboard.admin.view', 'dashboard.subadmin.view'), getDashboardStats);
-router.get('/dashboard/weekly', authMiddleware, requirePermission('dashboard.super.view', 'dashboard.admin.view', 'dashboard.subadmin.view'), getWeeklyStats);
+router.get('/dashboard', authMiddleware, requireAnyPermission('dashboard.super.view', 'dashboard.admin.view', 'dashboard.subadmin.view'), getDashboardStats);
+router.get('/dashboard/weekly', authMiddleware, requireAnyPermission('dashboard.super.view', 'dashboard.admin.view', 'dashboard.subadmin.view'), getWeeklyStats);
 
 // User management — requires user.view
 router.get('/users', authMiddleware, requirePermission('user.view'), adminListUsers);

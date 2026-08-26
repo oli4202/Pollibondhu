@@ -86,7 +86,7 @@ async function loadRBACContext(userId: number): Promise<RBACContext> {
     throw new Error('User not found');
   }
 
-  // Collect all role names
+  // Collect all role names from database
   const roles: string[] = user.user_roles.map((ur) => ur.role.name);
 
   // If no roles assigned via user_roles, use legacy role
@@ -94,7 +94,7 @@ async function loadRBACContext(userId: number): Promise<RBACContext> {
     roles.push(user.role);
   }
 
-  // Collect all unique permissions across all roles
+  // Collect all unique permissions across all roles from database
   const permissionSet = new Set<string>();
   for (const userRole of user.user_roles) {
     for (const rp of userRole.role.role_permissions) {
@@ -102,126 +102,19 @@ async function loadRBACContext(userId: number): Promise<RBACContext> {
     }
   }
 
-  // Legacy role permissions fallback (for backward compatibility)
-  const LEGACY_ROLE_PERMISSIONS: Record<string, string[]> = {
-    ADMIN: [
-      'user.view', 'user.create', 'user.update', 'user.delete',
-      'complaint.view', 'complaint.create', 'complaint.assign', 'complaint.update', 'complaint.resolve',
-      'application.view', 'application.process', 'application.approve', 'application.reject',
-      'budget.view', 'budget.create', 'budget.update', 'budget.approve',
-      'dashboard.admin.view', 'dashboard.super.view',
-      'message.send', 'message.receive', 'message.group_create',
-      'service.view', 'service.create', 'service.update', 'service.delete', 'service.approve',
-      'project.view', 'project.create', 'project.update',
-      'department.view', 'department.manage_officers',
-      'notification.broadcast', 'audit.view',
-    ],
-    SUPER_ADMIN: [
-      'user.view', 'user.create', 'user.update', 'user.delete',
-      'role.view', 'role.create', 'role.update', 'role.delete',
-      'permission.view', 'permission.assign',
-      'complaint.view', 'complaint.create', 'complaint.assign', 'complaint.update', 'complaint.resolve',
-      'application.view', 'application.process', 'application.approve', 'application.reject',
-      'budget.view', 'budget.create', 'budget.update', 'budget.approve',
-      'dashboard.admin.view', 'dashboard.super.view', 'dashboard.subadmin.view',
-      'message.send', 'message.receive', 'message.group_create',
-      'service.view', 'service.create', 'service.update', 'service.delete', 'service.approve',
-      'project.view', 'project.create', 'project.update', 'project.delete',
-      'department.view', 'department.create', 'department.update', 'department.manage_officers',
-      'notification.broadcast', 'audit.view', 'audit.export', 'settings.view', 'settings.update',
-      'agriculture.view', 'agriculture.create', 'agriculture.update',
-      'education.view', 'institution.create', 'institution.manage',
-      'ngo.view', 'ngo.create', 'ngo.manage',
-      'event.view', 'event.create', 'news.view', 'news.create', 'news.publish',
-      'waste.view', 'waste.manage', 'waste.zone.manage',
-      'emergency.view', 'emergency.manage', 'emergency.contact.manage',
-    ],
-    SUB_ADMIN: [
-      'user.view',
-      'complaint.view', 'complaint.assign', 'complaint.update', 'complaint.resolve',
-      'application.view', 'application.process', 'application.approve', 'application.reject',
-      'budget.view', 'budget.create', 'budget.update',
-      'dashboard.subadmin.view',
-      'message.send', 'message.receive', 'message.group_create', 'message.department_chat',
-      'service.view', 'service.create', 'service.update', 'service.approve', 'service.reject',
-      'project.view', 'project.create', 'project.update',
-      'department.view', 'department.update', 'department.manage_officers',
-      'notification.broadcast',
-      'agriculture.view', 'agriculture.create', 'agriculture.update',
-      'education.view', 'institution.manage',
-      'ngo.view',
-      'event.view', 'event.create', 'news.view', 'news.create', 'news.publish',
-      'waste.view', 'waste.manage', 'waste.zone.manage',
-      'emergency.view', 'emergency.manage',
-    ],
-    OFFICER: [
-      'user.view',
-      'complaint.view', 'complaint.update',
-      'application.view', 'application.process', 'application.approve', 'application.reject',
-      'dashboard.officer.view',
-      'message.send', 'message.receive', 'message.department_chat',
-      'service.view',
-      'project.view', 'project.update',
-      'department.view',
-      'agriculture.view', 'agriculture.create', 'agriculture.update',
-      'education.view',
-      'event.view', 'event.create', 'news.view',
-      'waste.view', 'waste.manage',
-      'emergency.view', 'emergency.manage',
-    ],
-    SERVICE_PROVIDER: [
-      'service.view', 'service.create', 'service.update', 'service.delete',
-      'message.send', 'message.receive',
-      'dashboard.citizen.view',
-    ],
-    NGO_ADMIN: [
-      'ngo.view', 'ngo.manage',
-      'programme.view', 'programme.create', 'programme.enroll',
-      'donation.manage',
-      'message.send', 'message.receive', 'message.group_create',
-      'dashboard.citizen.view',
-      'event.view', 'event.create',
-      'education.view', 'institution.create',
-    ],
-    INSTITUTION_ADMIN: [
-      'institution.view', 'institution.manage',
-      'course.view', 'course.create', 'course.manage',
-      'student.view', 'student.enroll',
-      'message.send', 'message.receive', 'message.group_create',
-      'dashboard.citizen.view',
-      'education.view',
-    ],
-    TEACHER: [
-      'course.view', 'course.manage',
-      'student.view',
-      'message.send', 'message.receive',
-      'dashboard.citizen.view',
-      'education.view',
-    ],
-    CITIZEN: [
-      'complaint.create', 'complaint.view', 'complaint.verify', 'complaint.close',
-      'application.view', 'application.create',
-      'message.send', 'message.receive',
-      'dashboard.citizen.view',
-      'agriculture.view',
-      'education.view',
-      'ngo.view', 'programme.enroll',
-      'event.view', 'event.attend',
-      'news.view',
-      'emergency.view',
-      'waste.report',
-      'ai.chat',
-    ],
-  };
-
-  // Merge database permissions with legacy fallback
+  // Legacy fallback — only used when no database roles/permissions are assigned
   if (permissionSet.size === 0) {
-    // No database permissions found — use legacy role permissions
-    for (const roleName of roles) {
-      const legacyPerms = LEGACY_ROLE_PERMISSIONS[roleName] || [];
-      for (const perm of legacyPerms) {
-        permissionSet.add(perm);
-      }
+    const LEGACY: Record<string, string[]> = {
+      ADMIN: ['user.view','user.create','user.update','user.delete','role.view','role.create','role.update','role.delete','permission.view','permission.assign','dashboard.admin.view','service.view','service.create','service.update','service.delete','service.approve','complaint.view','complaint.create','complaint.assign','complaint.update','complaint.resolve','application.view','application.process','application.approve','application.reject','budget.view','budget.create','budget.update','budget.approve','project.view','project.create','project.update','project.delete','department.view','department.create','department.update','department.manage_officers','notification.broadcast','audit.view','audit.export','settings.view','settings.update','message.send','message.receive','message.group_create','agriculture.view','agriculture.create','agriculture.update','education.view','institution.create','institution.manage','ngo.view','ngo.create','ngo.manage','event.view','event.create','news.view','news.create','news.publish','waste.view','waste.manage','waste.zone.manage','emergency.view','emergency.manage','emergency.contact.manage'],
+      OFFICER: ['user.view','complaint.view','complaint.update','complaint.assign','complaint.resolve','application.view','application.process','application.approve','application.reject','dashboard.officer.view','message.send','message.receive','message.department_chat','service.view','project.view','project.update','department.view','agriculture.view','agriculture.create','agriculture.update','education.view','event.view','event.create','news.view','waste.view','waste.manage','emergency.view','emergency.manage'],
+      SERVICE_PROVIDER: ['service.view','service.create','service.update','service.delete','message.send','message.receive','dashboard.citizen.view'],
+      GOV_SERVICE_PROVIDER: ['service.view','service.create','service.update','service.delete','application.view','application.process','application.approve','application.reject','message.send','message.receive','message.group_create','dashboard.citizen.view','notification.broadcast'],
+      CITIZEN: ['complaint.create','complaint.view','complaint.verify','complaint.close','application.view','application.create','project.view','project.feedback','message.send','message.receive','dashboard.citizen.view','agriculture.view','education.view','ngo.view','programme.enroll','event.view','event.attend','news.view','emergency.view','waste.report','ai.chat'],
+      USER: ['complaint.create','complaint.view','complaint.verify','complaint.close','application.view','application.create','project.view','project.feedback','message.send','message.receive','dashboard.citizen.view','agriculture.view','education.view','ngo.view','programme.enroll','event.view','event.attend','news.view','emergency.view','waste.report','ai.chat'],
+      FARMER: ['complaint.create','complaint.view','complaint.verify','complaint.close','application.view','application.create','project.view','project.feedback','message.send','message.receive','dashboard.citizen.view','agriculture.view','education.view','ngo.view','programme.enroll','event.view','event.attend','news.view','emergency.view','waste.report','ai.chat'],
+    };
+    for (const r of roles) {
+      for (const p of (LEGACY[r] || [])) permissionSet.add(p);
     }
   }
 
@@ -277,7 +170,7 @@ export async function authMiddleware(
 }
 
 // ============================================
-// Role-Based Middleware (Legacy — for backward compatibility)
+// Role-Based Middleware
 // ============================================
 
 export function requireRole(...roles: string[]) {
@@ -286,7 +179,11 @@ export function requireRole(...roles: string[]) {
       sendError(res, 'Authentication required', 401);
       return;
     }
-    // Check if user has any of the required roles
+    // ADMIN bypasses all role checks
+    if (req.user.roles.includes('ADMIN')) {
+      next();
+      return;
+    }
     const hasRole = req.user.roles.some((r) => roles.includes(r));
     if (!hasRole) {
       sendError(res, 'Forbidden: insufficient role permissions', 403);
@@ -302,7 +199,7 @@ export function requireRole(...roles: string[]) {
 
 /**
  * Check if user has ALL of the specified permissions.
- * Usage: requirePermission('complaint.view', 'complaint.assign')
+ * ADMIN bypasses all permission checks.
  */
 export function requirePermission(...requiredPermissions: string[]) {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
@@ -311,8 +208,8 @@ export function requirePermission(...requiredPermissions: string[]) {
       return;
     }
 
-    // SUPER_ADMIN bypasses all permission checks
-    if (req.user.roles.includes('SUPER_ADMIN')) {
+    // ADMIN bypasses all permission checks
+    if (req.user.roles.includes('ADMIN')) {
       next();
       return;
     }
@@ -336,7 +233,7 @@ export function requirePermission(...requiredPermissions: string[]) {
 
 /**
  * Check if user has ANY of the specified permissions.
- * Usage: requireAnyPermission('complaint.view', 'complaint.assign')
+ * ADMIN bypasses all permission checks.
  */
 export function requireAnyPermission(...permissions: string[]) {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
@@ -345,7 +242,8 @@ export function requireAnyPermission(...permissions: string[]) {
       return;
     }
 
-    if (req.user.roles.includes('SUPER_ADMIN')) {
+    // ADMIN bypasses all permission checks
+    if (req.user.roles.includes('ADMIN')) {
       next();
       return;
     }
@@ -367,8 +265,7 @@ export function requireAnyPermission(...permissions: string[]) {
 
 /**
  * Check if user has access to the specified department.
- * SUPER_ADMIN bypasses. SUB_ADMIN must have matching department.
- * OFFICER must have matching department.
+ * ADMIN bypasses. Others must have matching department.
  */
 export function requireDepartmentAccess(departmentIdParam: string = 'departmentId') {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
@@ -377,8 +274,8 @@ export function requireDepartmentAccess(departmentIdParam: string = 'departmentI
       return;
     }
 
-    // SUPER_ADMIN bypasses
-    if (req.user.roles.includes('SUPER_ADMIN')) {
+    // ADMIN bypasses
+    if (req.user.roles.includes('ADMIN')) {
       next();
       return;
     }
@@ -390,12 +287,10 @@ export function requireDepartmentAccess(departmentIdParam: string = 'departmentI
     );
 
     if (!requestedDeptId) {
-      // No department ID in request — allow (department scoping happens in service layer)
       next();
       return;
     }
 
-    // Check if user has access to this department
     const hasAccess =
       req.user.department_ids.includes(requestedDeptId) ||
       req.user.department_id === requestedDeptId;
@@ -419,7 +314,7 @@ export function requireDepartmentAccess(departmentIdParam: string = 'departmentI
 
 /**
  * Check if user has access to the specified location.
- * SUPER_ADMIN bypasses. Others must have matching location assignment.
+ * ADMIN bypasses. Others must have matching location assignment.
  */
 export function requireLocationAccess(locationIdParam: string = 'locationId') {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
@@ -428,7 +323,7 @@ export function requireLocationAccess(locationIdParam: string = 'locationId') {
       return;
     }
 
-    if (req.user.roles.includes('SUPER_ADMIN')) {
+    if (req.user.roles.includes('ADMIN')) {
       next();
       return;
     }
@@ -461,8 +356,7 @@ export function requireLocationAccess(locationIdParam: string = 'locationId') {
 
 /**
  * Check if the authenticated user owns the resource.
- * SUPER_ADMIN and SUB_ADMIN bypass ownership checks.
- * The userIdParam specifies which request param contains the owner's user ID.
+ * ADMIN bypasses ownership checks.
  */
 export function requireOwnership(userIdParam: string = 'userId') {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
@@ -471,8 +365,8 @@ export function requireOwnership(userIdParam: string = 'userId') {
       return;
     }
 
-    // Admins bypass ownership
-    if (req.user.roles.includes('SUPER_ADMIN') || req.user.roles.includes('SUB_ADMIN')) {
+    // ADMIN bypasses ownership
+    if (req.user.roles.includes('ADMIN')) {
       next();
       return;
     }

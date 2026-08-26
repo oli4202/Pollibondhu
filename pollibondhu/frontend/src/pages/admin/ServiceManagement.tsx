@@ -33,7 +33,7 @@ export default function ServiceManagement() {
       const res = await api.get('/admin/services', { params: { page, limit: 10, status: statusFilter, search } });
       const data = res.data.data;
       setServices(data.data || []);
-      setMeta(data.meta || { page, limit: 10, total: 0 });
+      setMeta(data.meta || { page: data.page || page, limit: data.limit || 10, total: data.total || 0 });
     } catch { setServices([]); }
   }
 

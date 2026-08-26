@@ -27,11 +27,6 @@ export default function ForgotPassword() {
       const res = await api.post('/auth/forgot-password', { email });
       addToast(res.data.data?.message || 'Reset code sent to your email', 'success');
       setSent(true);
-      // In dev mode, auto-fill OTP if returned
-      if (res.data.data?.otp) {
-        setOtp(res.data.data.otp);
-        addToast(`Dev mode: OTP is ${res.data.data.otp}`);
-      }
     } catch (err: any) {
       addToast(err.response?.data?.error || 'Failed to send reset code', 'error');
     } finally {

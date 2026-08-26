@@ -11,13 +11,6 @@ const quickLinks = [
   { label: 'Community Post', note: 'Ask your neighbours', to: '/community', emoji: '💬', color: '#FF9700' },
   { label: 'My Profile', note: 'Keep details current', to: '/dashboard/profile', emoji: '👤', color: '#980FF5' },
 ];
-const activities = [
-  ['Crop advisory received', 'New guidance for Boro paddy', 'Advisory', 'bg-emerald-100 text-emerald-700'],
-  ['Service request updated', 'Your nearby service search was saved', 'Updated', 'bg-blue-100 text-blue-700'],
-  ['Community reply', 'A farmer replied to your discussion', 'New reply', 'bg-violet-100 text-violet-700'],
-  ['Weather alert', 'Rainfall is expected this week', 'Info', 'bg-amber-100 text-amber-700'],
-];
-
 const initialAnnouncements = [
   { id: 1, type: 'Agriculture', badgeClass: 'bg-emerald-100 text-emerald-700', text: 'Boro paddy subsidy applications are open until Dec 31.' },
   { id: 2, type: 'Citizen', badgeClass: 'bg-blue-100 text-blue-700', text: 'New smart NID card distribution is available locally.' },
@@ -28,8 +21,15 @@ export default function UserDashboard() {
   const { user } = useAuth();
   const [weather, setWeather] = useState<Weather | null>(null);
   const [announcements, setAnnouncements] = useState(initialAnnouncements);
+  const [activities, setActivities] = useState<any[]>([]);
 
   useEffect(() => { api.get('/agriculture/weather').then(res => setWeather(res.data.data)).catch(() => undefined); }, []);
+  useEffect(() => {
+    const loadActivity = () => api.get('/users/activity').then(res => setActivities(res.data.data || [])).catch(() => undefined);
+    loadActivity();
+    const timer = window.setInterval(loadActivity, 10000);
+    return () => window.clearInterval(timer);
+  }, []);
   
   const district = user?.district || weather?.district || 'Your district';
   const completion = [user?.full_name, user?.email, user?.phone, user?.district].filter(Boolean).length * 25;
@@ -75,18 +75,19 @@ export default function UserDashboard() {
             <Link className="text-xs font-semibold text-emerald-700 hover:underline" to="/community">View all</Link>
           </div>
           <div className="mt-3 divide-y divide-earth-100">
-            {activities.map(([title, detail, badge, color], index) => 
-              <div key={title} className="flex items-center gap-3 py-3">
+            {activities.length === 0 ? <p className="py-3 text-sm text-earth-400">No recent activity.</p> : activities.map((activity: any, index) => {
+              const color = index % 2 ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700';
+              return <div key={activity.activity_id} className="flex items-center gap-3 py-3">
                 <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${color}`}>
                   <FileText size={17} />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold">{title}</p>
-                  <p className="truncate text-xs text-earth-400">{detail}</p>
+                  <p className="text-sm font-semibold">{activity.action}</p>
+                  <p className="truncate text-xs text-earth-400">{new Date(activity.created_at).toLocaleString()}</p>
                 </div>
-                <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${color}`}>{badge}</span>
+                <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${color}`}>{activity.entity_type.replace('_', ' ')}</span>
               </div>
-            )}
+            })}
           </div>
         </section>
       </div>

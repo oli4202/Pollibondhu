@@ -251,4 +251,47 @@ router.post('/quick-help', async (req: any, res) => {
   }
 });
 
+// Grammar and spelling correction endpoint
+router.post('/correct', authMiddleware, async (req: AuthenticatedRequest, res) => {
+  try {
+    const { text, language } = req.body;
+
+    if (!text?.trim()) {
+      return res.status(400).json({ success: false, error: 'Text is required' });
+    }
+
+    const lang = language || 'English';
+    const prompt = `Correct the grammar, spelling, and punctuation of the following ${lang} text. Return ONLY the corrected text, nothing else. Keep the same meaning and tone. If the text is already correct, return it as-is.\n\nText: "${text}"`;
+
+    const response = await getAiResponse('CITIZEN', prompt, 'You are a grammar and spelling correction assistant. Return only the corrected text.');
+    res.json({ success: true, corrected: response });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to correct text' });
+  }
+});
+
+// AI text improvement endpoint (for descriptions, titles)
+router.post('/improve', authMiddleware, async (req: AuthenticatedRequest, res) => {
+  try {
+    const { text, type } = req.body; // type: 'title' | 'description' | 'complaint'
+
+    if (!text?.trim()) {
+      return res.status(400).json({ success: false, error: 'Text is required' });
+    }
+
+    const typePrompts: Record<string, string> = {
+      title: 'Improve this service title to be more professional and clear. Return ONLY the improved title.',
+      description: 'Improve this service description to be more professional, clear, and appealing to customers. Keep it concise. Return ONLY the improved description.',
+      complaint: 'Rewrite this complaint to be more formal, clear, and effective. Keep the same facts. Return ONLY the improved text.',
+    };
+
+    const prompt = `${typePrompts[type] || typePrompts.description}\n\nOriginal: "${text}"`;
+
+    const response = await getAiResponse('CITIZEN', prompt, 'You are a professional text improvement assistant.');
+    res.json({ success: true, improved: response });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to improve text' });
+  }
+});
+
 export default router;
