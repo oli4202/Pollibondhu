@@ -8,9 +8,20 @@
 
 <br/>
 
+<div align="center">
+  <img src="./assets/banner.png" alt="PolliBondhu Banner" width="800" />
+</div>
+
 # 🌾 PolliBondhu — Smart Village Platform
 
-A comprehensive digital platform for rural Bangladesh connecting citizens, service providers, government officers, and NGOs.
+## 📖 What is PolliBondhu?
+**PolliBondhu (পল্লীবন্ধু)** translates to "Friend of the Village." It is a comprehensive digital ecosystem specifically designed to modernize, connect, and empower rural communities in Bangladesh. It bridges the gap between citizens, farmers, government officials, private service providers, and NGOs by providing a unified, localized platform for communication, service delivery, and governance.
+
+## 🌟 About PolliBondhu
+Rural areas often suffer from disconnected services and lack of access to real-time information. PolliBondhu solves this by offering:
+- **For Citizens & Farmers:** Instant access to agricultural advice, market prices, government services (NID, Birth Registration), community forums, and a direct line to file complaints or report emergencies.
+- **For Government Officers:** A streamlined dashboard to process applications, resolve civic complaints, broadcast alerts, and monitor departmental activities.
+- **For Providers & NGOs:** A localized marketplace to offer private services (e.g., tractor rentals, repairs) and manage community development programmes.
 
 > **🌟 Project for Academic Submission** — Implements **5 software design patterns**, **≥90% unit test coverage**, and a full CI-ready test suite with Jest. Beautifully designed with modern React & TailwindCSS.
 
