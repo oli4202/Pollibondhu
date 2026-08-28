@@ -32,143 +32,234 @@ A comprehensive digital platform for rural Bangladesh connecting citizens, servi
 
 Five structural and behavioral design patterns were meticulously implemented to solve specific architectural problems in the application.
 
-### 1. Singleton Pattern
-**Problem Solved:** Managing the Prisma database client connection. We need exactly one instance of the database client throughout the application's lifecycle to prevent connection exhaustion.
-**Files Involved:** `backend/src/patterns/singleton/DatabaseManager.ts`
+---
 
+### 1. Singleton Pattern
+
+- **What problem it solves:** Managing the database connection pool in a Node.js environment. If multiple instances of `PrismaClient` are created on every request or service instantiation, it leads to connection exhaustion, memory leaks, and "Too many connections" errors in the database.
+- **How it solves it:** By ensuring that a class has only one instance and providing a global point of access to it. It prevents the instantiation of multiple database clients by hiding the constructor and exposing a static `getInstance()` method.
+- **Why this pattern was chosen:** It is the industry standard for managing stateful, resource-heavy shared connections (like a database or logger) across an entire application without passing the dependency down explicitly to every function.
+- **File & Class:** `backend/src/patterns/singleton/DatabaseManager.ts` | Class: `DatabaseManager`
+- **UI Representation / Visualization:**  
+  ![Singleton Diagram Visualization](https://via.placeholder.com/600x200.png?text=Singleton+Ensures+Smooth+UI+Data+Loading+Without+Database+Crashes)  
+  *In the UI, this manifests as stable and fast data loading on the Dashboard and Services pages, as the database connection pool remains healthy.*
+
+**Creation Flow Diagram:**
 ```mermaid
-classDiagram
-    class DatabaseManager {
-        -static instance: DatabaseManager
-        -prisma: PrismaClient
-        -constructor()
-        +static getInstance() DatabaseManager
-        +getPrisma() PrismaClient
-        +disconnect() void
-    }
-    DatabaseManager --> DatabaseManager : creates/returns
+sequenceDiagram
+    participant App as Application/Service
+    participant DB as DatabaseManager
+    
+    App->>DB: DatabaseManager.getInstance()
+    alt Instance exists?
+        DB-->>App: Return existing instance
+    else Instance does not exist
+        DB->>DB: create new PrismaClient
+        DB-->>App: Return new instance
+    end
+    App->>DB: getPrisma().user.findMany()
 ```
+
+**How it works:**
+When any service (e.g., `UserService`) needs to query the database, it calls `DatabaseManager.getInstance()`. The manager checks if a `PrismaClient` instance already exists. If yes, it returns it; if no, it instantiates one, stores it statically, and returns it.
+
+**Implementation Evidence (Code Snippet):**
+```typescript
+class DatabaseManager {
+    private static instance: DatabaseManager;
+    private prisma: PrismaClient;
+
+    private constructor() {
+        this.prisma = new PrismaClient();
+    }
+
+    public static getInstance(): DatabaseManager {
+        if (!DatabaseManager.instance) {
+            DatabaseManager.instance = new DatabaseManager();
+        }
+        return DatabaseManager.instance;
+    }
+}
+```
+
+---
 
 ### 2. Factory Method Pattern
-**Problem Solved:** Creating different types of notifications (In-App, SMS, Email). The client doesn't need to know the specific class instantiation logic, it just asks the factory for a notification processor.
-**Files Involved:** `backend/src/patterns/factory/NotificationFactory.ts`
 
+- **What problem it solves:** Creating different types of notifications (In-App, SMS, Email) often leads to tightly coupled code with large `if-else` or `switch` statements scattered throughout the codebase. If a new notification type is added (e.g., Push Notification), the core logic must be modified, violating the Open-Closed Principle.
+- **How it solves it:** It provides an interface for creating objects in a superclass, but allows subclasses to alter the type of objects that will be created. The client code just requests a specific "type" string from the Factory.
+- **Why this pattern was chosen:** It centralizes the instantiation logic for notifications, making the system highly extensible. Adding a new notification type only requires adding a new class and a single line in the Factory.
+- **File & Class:** `backend/src/patterns/factory/NotificationFactory.ts` | Interface: `NotificationProcessor`
+- **UI Representation / Visualization:**  
+  ![Factory Pattern UI](https://via.placeholder.com/600x200.png?text=Notification+Bell+%26+Dropdown+in+Navbar)  
+  *In the UI, this pattern directly powers the real-time Notification Bell dropdown in the navigation bar, processing and rendering alerts dynamically based on their type.*
+
+**Creation Flow Diagram:**
 ```mermaid
-classDiagram
-    class NotificationProcessor {
-        <<interface>>
-        +process(userId, title, message)
-    }
-    class InAppNotification {
-        +process()
-    }
-    class EmailNotification {
-        +process()
-    }
-    class SMSNotification {
-        +process()
-    }
-    class NotificationFactory {
-        +static createProcessor(type) NotificationProcessor
-    }
+sequenceDiagram
+    participant Client as ApplicationService
+    participant Factory as NotificationFactory
+    participant Processor as NotificationProcessor
     
-    NotificationProcessor <|.. InAppNotification
-    NotificationProcessor <|.. EmailNotification
-    NotificationProcessor <|.. SMSNotification
-    NotificationFactory ..> NotificationProcessor : creates
+    Client->>Factory: createProcessor('IN_APP')
+    Factory-->>Client: Returns InAppNotification instance
+    Client->>Processor: process(userId, title, message)
+    Processor-->>Client: Notification Sent & Saved
 ```
+
+**How it works:**
+The `NotificationFactory` evaluates the requested type. Based on the type, it instantiates the corresponding concrete processor (e.g., `InAppNotification`) which implements the common `NotificationProcessor` interface, ensuring a uniform `process()` method can be called safely by the client.
+
+**Implementation Evidence (Code Snippet):**
+```typescript
+export class NotificationFactory {
+    static createProcessor(type: NotificationType): NotificationProcessor {
+        switch (type) {
+            case 'IN_APP': return new InAppNotification();
+            case 'EMAIL': return new EmailNotification();
+            case 'SMS': return new SMSNotification();
+            default: throw new Error('Unsupported notification type');
+        }
+    }
+}
+```
+
+---
 
 ### 3. Strategy Pattern
-**Problem Solved:** Dynamic search and filtering across different domains. Searching for a "Service", "Crop", or "Expert" requires entirely different database queries. The strategy pattern encapsulates these algorithms.
-**Files Involved:** `backend/src/patterns/strategy/SearchStrategy.ts`
 
+- **What problem it solves:** The platform requires searching across completely different domains (Government Services, Agricultural Crops, and Experts). Each domain requires fundamentally different database tables, filters, and query logic. Embedding this in one giant controller creates unmaintainable spaghetti code.
+- **How it solves it:** By defining a family of algorithms (search strategies), encapsulating each one, and making them interchangeable. The context (SearchContext) receives a strategy at runtime and executes it.
+- **Why this pattern was chosen:** It allows the global search bar in the UI to dynamically switch query behaviors at runtime based on the user's selected category dropdown, strictly separating the concerns of *how* a search is performed from the controller.
+- **File & Class:** `backend/src/patterns/strategy/SearchStrategy.ts` | Interface: `SearchStrategy`
+- **UI Representation / Visualization:**  
+  ![Strategy Pattern UI](https://via.placeholder.com/600x200.png?text=Global+Search+Bar+with+Dynamic+Filters)  
+  *In the UI, this is utilized by the unified Search Bar where a user can select "Services", "Crops", or "Experts" from a dropdown to alter search behavior.*
+
+**Creation Flow Diagram:**
 ```mermaid
-classDiagram
-    class SearchStrategy {
-        <<interface>>
-        +search(query, filters)
-    }
-    class ServiceSearchStrategy {
-        +search()
-    }
-    class CropSearchStrategy {
-        +search()
-    }
-    class ExpertSearchStrategy {
-        +search()
-    }
-    class SearchContext {
-        -strategy: SearchStrategy
-        +setStrategy(SearchStrategy)
-        +executeSearch(query)
+sequenceDiagram
+    participant Controller as SearchController
+    participant Context as SearchContext
+    participant Strategy as Strategy Implementation
+    
+    Controller->>Context: new SearchContext()
+    Controller->>Context: setStrategy(new ServiceSearchStrategy())
+    Controller->>Context: executeSearch('tractor', filters)
+    Context->>Strategy: search('tractor', filters)
+    Strategy-->>Context: Return Prisma Service Results
+    Context-->>Controller: Return Results to UI
+```
+
+**How it works:**
+The controller initializes a `SearchContext`. Depending on the query parameter (e.g., `type=service`), it injects the `ServiceSearchStrategy`. It then calls `executeSearch()`. The context delegates the complex Prisma querying logic entirely to the injected strategy.
+
+**Implementation Evidence (Code Snippet):**
+```typescript
+export class SearchContext {
+    private strategy: SearchStrategy;
+    
+    setStrategy(strategy: SearchStrategy) {
+        this.strategy = strategy;
     }
     
-    SearchStrategy <|.. ServiceSearchStrategy
-    SearchStrategy <|.. CropSearchStrategy
-    SearchStrategy <|.. ExpertSearchStrategy
-    SearchContext o-- SearchStrategy : uses
+    async executeSearch(query: string, filters: any) {
+        return this.strategy.search(query, filters);
+    }
+}
 ```
+
+---
 
 ### 4. Observer Pattern
-**Problem Solved:** Decoupling event generation from event handling. When a user creates a complaint, multiple things must happen (notifications, audit logs). The Observer pattern broadcasts these events to subscribed listeners.
-**Files Involved:** `backend/src/patterns/observer/NotificationSubject.ts`
 
+- **What problem it solves:** When a significant event occurs (e.g., a citizen files a complaint), multiple downstream actions must happen independently (e.g., sending an admin alert, writing to the audit log). Hardcoding these actions tightly couples the complaint service to the audit and notification services.
+- **How it solves it:** By establishing a one-to-many dependency between objects. The Subject (NotificationManager) maintains a list of Observers (AuditLog, RealTimeAlert). When an event occurs, it notifies all attached observers automatically.
+- **Why this pattern was chosen:** It provides extreme loose coupling. We can add new reactions to an event (e.g., sending an SMS) simply by attaching a new observer, without touching the core Complaint logic.
+- **File & Class:** `backend/src/patterns/observer/NotificationSubject.ts` | Interface: `Subject`
+- **UI Representation / Visualization:**  
+  ![Observer Pattern UI](https://via.placeholder.com/600x200.png?text=Audit+Logs+Dashboard+%26+Real-time+Toasts)  
+  *In the UI, this translates to the Admin Audit Logs updating instantly in the background, and Officer dashboards receiving real-time Socket.io toast notifications.*
+
+**Creation Flow Diagram:**
 ```mermaid
-classDiagram
-    class Subject {
-        <<interface>>
-        +attach(Observer)
-        +detach(Observer)
-        +notify(EventData)
-    }
-    class Observer {
-        <<interface>>
-        +update(EventData)
-    }
-    class NotificationManager {
-        -observers: Observer[]
-        +attach()
-        +notify()
-    }
-    class AuditLogObserver {
-        +update()
-    }
-    class RealTimeAlertObserver {
-        +update()
-    }
+sequenceDiagram
+    participant Subject as NotificationManager
+    participant Obs1 as AuditLogObserver
+    participant Obs2 as RealTimeAlertObserver
     
-    Subject <|.. NotificationManager
-    Observer <|.. AuditLogObserver
-    Observer <|.. RealTimeAlertObserver
-    NotificationManager o-- Observer : notifies
+    Subject->>Subject: attach(Obs1)
+    Subject->>Subject: attach(Obs2)
+    Note over Subject: Event Occurs (e.g. Complaint Created)
+    Subject->>Obs1: update(eventData)
+    Subject->>Obs2: update(eventData)
 ```
 
-### 5. Facade Pattern
-**Problem Solved:** Providing a simplified interface to a complex subsystem. The Admin Dashboard requires aggregating data from 6 different database tables. The Facade hides this complexity from the controller.
-**Files Involved:** `backend/src/patterns/facade/AdminDashboardFacade.ts`
+**How it works:**
+The `NotificationManager` implements the `Subject` interface. Observers like `AuditLogObserver` register themselves using `.attach()`. When a service triggers `.notify()`, the manager loops through all observers and calls their `.update()` method concurrently.
 
+**Implementation Evidence (Code Snippet):**
+```typescript
+export class NotificationManager implements Subject {
+    private observers: Observer[] = [];
+
+    attach(observer: Observer): void {
+        this.observers.push(observer);
+    }
+
+    notify(eventData: any): void {
+        for (const observer of this.observers) {
+            observer.update(eventData);
+        }
+    }
+}
+```
+
+---
+
+### 5. Facade Pattern
+
+- **What problem it solves:** The Admin Dashboard requires a complex compilation of statistics: total users, pending applications, unresolved complaints, active services, and budget tracking. Fetching this requires interacting with 5+ different repository classes, burdening the controller with massive orchestration logic.
+- **How it solves it:** It provides a unified, high-level interface to a set of interfaces in a subsystem. The `AdminDashboardFacade` wraps all the disparate repository calls into a single, clean `.getDashboardStats()` method.
+- **Why this pattern was chosen:** It drastically simplifies the Controller layer, strictly enforcing the separation of concerns. The Controller remains thin, while the Facade handles the complex subsystem aggregation.
+- **File & Class:** `backend/src/patterns/facade/AdminDashboardFacade.ts` | Class: `AdminDashboardFacade`
+- **UI Representation / Visualization:**  
+  ![Facade Pattern UI](https://via.placeholder.com/600x200.png?text=Admin+Dashboard+Analytics+Cards)  
+  *In the UI, this powers the 4+ statistic cards at the top of the Admin Dashboard (Total Users, Pending Apps, etc.) loading them simultaneously via one API call.*
+
+**Creation Flow Diagram:**
 ```mermaid
-classDiagram
-    class AdminDashboardFacade {
-        +getDashboardStats()
-    }
-    class UserRepository {
-        +count()
-    }
-    class ApplicationRepository {
-        +count()
-    }
-    class ComplaintRepository {
-        +count()
-    }
-    class ServiceRepository {
-        +count()
-    }
+sequenceDiagram
+    participant Controller as AdminController
+    participant Facade as AdminDashboardFacade
+    participant Repos as Prisma Repositories
     
-    AdminDashboardFacade --> UserRepository
-    AdminDashboardFacade --> ApplicationRepository
-    AdminDashboardFacade --> ComplaintRepository
-    AdminDashboardFacade --> ServiceRepository
+    Controller->>Facade: getDashboardStats()
+    Facade->>Repos: count Users
+    Facade->>Repos: count Applications
+    Facade->>Repos: count Complaints
+    Facade->>Repos: count Services
+    Repos-->>Facade: Return counts
+    Facade-->>Controller: Return formatted Statistics Object
+```
+
+**How it works:**
+The controller simply instantiates the `AdminDashboardFacade` and calls `getDashboardStats()`. The Facade internally instantiates all necessary database repositories, executes `Promise.all()` to fetch data concurrently, and formats the response object.
+
+**Implementation Evidence (Code Snippet):**
+```typescript
+export class AdminDashboardFacade {
+    async getDashboardStats() {
+        const [users, apps, complaints, services] = await Promise.all([
+            prisma.user.count(),
+            prisma.application.count({ where: { status: 'PENDING' } }),
+            prisma.complaint.count({ where: { status: 'PENDING' } }),
+            prisma.service.count()
+        ]);
+        
+        return { users, pendingApps: apps, pendingComplaints: complaints, totalServices: services };
+    }
+}
 ```
 
 ---
