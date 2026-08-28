@@ -15,28 +15,6 @@ export async function getDashboardStats(req: AuthenticatedRequest, res: Response
   }
 }
 
-export async function getSubAdminDashboardStats(req: AuthenticatedRequest, res: Response): Promise<void> {
-  try {
-    const adminId = req.user?.user_id;
-    if (!adminId) throw new Error('User not found');
-    const stats = await adminService.getSubAdminDashboardStats(adminId);
-    sendSuccess(res, stats);
-  } catch (err: any) {
-    sendError(res, err.message, 500);
-  }
-}
-
-export async function getOfficerDashboardStats(req: AuthenticatedRequest, res: Response): Promise<void> {
-  try {
-    const officerId = req.user?.user_id;
-    if (!officerId) throw new Error('User not found');
-    const stats = await adminService.getOfficerDashboardStats(officerId);
-    sendSuccess(res, stats);
-  } catch (err: any) {
-    sendError(res, err.message, 500);
-  }
-}
-
 export async function getWeeklyStats(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
     const stats = await adminService.getWeeklyStats();

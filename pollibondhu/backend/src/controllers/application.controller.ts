@@ -45,11 +45,8 @@ export async function listApplications(req: AuthenticatedRequest, res: Response)
     // Scoping: citizens see only their own applications
     const isCitizen = req.user!.roles.includes('CITIZEN') || req.user!.role === 'USER';
     const user_id = isCitizen ? req.user!.user_id : undefined;
-    
-    // Providers now see all applications
-    const provider_id = undefined;
 
-    const result = await applicationService.listApplications({ page, limit, status, user_id, service_id, provider_id });
+    const result = await applicationService.listApplications({ page, limit, status, user_id, service_id });
     sendSuccess(res, result);
   } catch (err: any) {
     sendError(res, err.message, 400);
@@ -101,19 +98,6 @@ export async function provideFeedback(req: AuthenticatedRequest, res: Response):
       application_id, req.user!.user_id, rating, feedback
     );
     sendSuccess(res, result, 'Feedback submitted');
-  } catch (err: any) {
-    sendError(res, err.message, 400);
-  }
-}
-
-export async function resubmitApplication(req: AuthenticatedRequest, res: Response): Promise<void> {
-  try {
-    const application_id = parseInt(req.params.id);
-    const { message } = req.body;
-    const result = await applicationService.resubmitApplication(
-      application_id, req.user!.user_id, message
-    );
-    sendSuccess(res, result, 'Application resubmitted successfully');
   } catch (err: any) {
     sendError(res, err.message, 400);
   }

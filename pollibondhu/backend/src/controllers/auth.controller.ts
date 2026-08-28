@@ -3,7 +3,6 @@ import { PrismaClient } from '@prisma/client';
 import { AuthService } from '../services/auth.service';
 import { sendSuccess, sendError } from '../utils/apiResponse';
 import { prisma } from '../patterns/singleton/DatabaseManager';
-import { verifyRefreshToken, generateAccessToken } from '../utils/jwt';
 
 const authService = new AuthService(prisma);
 
@@ -46,26 +45,5 @@ export async function resetPassword(req: Request, res: Response): Promise<void> 
     sendSuccess(res, result, 'Password reset successful');
   } catch (err: any) {
     sendError(res, err.message, 400);
-  }
-}
-
-/**
- * POST /auth/refresh
- * Uses the stored refreshToken (7-day expiry) to silently issue a new accessToken (15-min).
- * Called automatically by the frontend API interceptor on 401 responses.
- */
-export async function refreshToken(req: Request, res: Response): Promise<void> {
-  try {
-    const { refreshToken: token } = req.body;
-    if (!token) { sendError(res, 'Refresh token required', 400); return; }
-    const payload = verifyRefreshToken(token);
-    const newAccessToken = generateAccessToken({ 
-      user_id: payload.user_id, 
-      email: payload.email, 
-      role: payload.role 
-    });
-    sendSuccess(res, { accessToken: newAccessToken }, 'Token refreshed');
-  } catch {
-    sendError(res, 'Session expired. Please log in again.', 401);
   }
 }

@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { MessageSquare, ArrowLeft, Star, Sparkles, Loader2 } from 'lucide-react';
+import { MessageSquare, ArrowLeft, Star, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import api from '@/utils/api';
 import { useAuth } from '@/contexts/AuthContext';
@@ -44,19 +44,6 @@ export default function Feedback() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showAi, setShowAi] = useState(false);
-  const [generatingAi, setGeneratingAi] = useState(false);
-
-  const handleAutoFill = () => {
-    const randomType = feedbackTypes[Math.floor(Math.random() * feedbackTypes.length)].value;
-    setType(randomType);
-    setRating(5);
-    
-    if (aiMessages[randomType] && aiMessages[randomType].length > 0) {
-      setMessage(aiMessages[randomType][0]);
-    } else {
-      setMessage('This is a demo feedback message to show the application working perfectly.');
-    }
-  };
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -75,32 +62,6 @@ export default function Feedback() {
       setLoading(false);
     }
   }
-
-  const handleAiCorrect = async () => {
-    if (!message.trim()) return;
-    setGeneratingAi(true);
-    try {
-      const res = await api.post('/ai/correct', { text: message, language: 'English' });
-      if (res.data.corrected) setMessage(res.data.corrected);
-    } catch (err) {
-      alert('Failed to correct text');
-    } finally {
-      setGeneratingAi(false);
-    }
-  };
-
-  const handleAiImprove = async () => {
-    if (!message.trim()) return;
-    setGeneratingAi(true);
-    try {
-      const res = await api.post('/ai/improve', { text: message, type: 'feedback' });
-      if (res.data.improved) setMessage(res.data.improved);
-    } catch (err) {
-      alert('Failed to improve text');
-    } finally {
-      setGeneratingAi(false);
-    }
-  };
 
   return (
     <div className="max-w-3xl mx-auto px-6 py-12">
@@ -135,16 +96,7 @@ export default function Feedback() {
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Type Grid Dropdown */}
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-earth-700">Feedback Type *</label>
-              <button 
-                type="button" 
-                onClick={handleAutoFill}
-                className="text-xs px-3 py-1 bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100 rounded-lg font-medium transition flex items-center gap-1 shadow-sm"
-              >
-                <Sparkles size={12} /> Auto-Fill Demo
-              </button>
-            </div>
+            <label className="block text-sm font-medium text-earth-700 mb-2">Feedback Type *</label>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
               {feedbackTypes.map(t => (
                 <button key={t.value} type="button" onClick={() => setType(t.value)}
@@ -188,17 +140,6 @@ export default function Feedback() {
                 placeholder="Tell us what you think, suggest improvements, or report an issue..."
                 className="w-full border border-earth-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-polli-500"
               />
-              {/* Floating AI Action Buttons */}
-              {message.trim() && (
-                <div className="absolute top-2 right-2 flex flex-col gap-1 z-20">
-                  <button onClick={handleAiCorrect} type="button" disabled={generatingAi} className="flex items-center justify-center gap-1 text-[10px] font-bold text-polli-600 bg-polli-50 hover:bg-polli-100 px-2 py-1 rounded transition-colors shadow-sm disabled:opacity-50 border border-polli-200">
-                    {generatingAi ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />} Correct
-                  </button>
-                  <button onClick={handleAiImprove} type="button" disabled={generatingAi} className="flex items-center justify-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded transition-colors shadow-sm disabled:opacity-50 border border-emerald-200">
-                    {generatingAi ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />} Improve
-                  </button>
-                </div>
-              )}
               {type && aiMessages[type] && (
                 <button type="button" onClick={() => setShowAi(!showAi)}
                   className="absolute bottom-2 right-2 flex items-center gap-1 px-2 py-1 text-xs text-polli-600 hover:bg-polli-50 rounded-md">

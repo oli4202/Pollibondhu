@@ -61,7 +61,7 @@ export class ServiceService {
       throw new Error('Unauthorized to update this service');
     }
     const { category, ...rawData } = data;
-    const allowedFields = ['title', 'description', 'price', 'location', 'district', 'category_id', 'is_available', 'project_id'];
+    const allowedFields = ['title', 'description', 'price', 'location', 'district', 'category_id', 'is_available'];
     const update: Record<string, any> = Object.fromEntries(Object.entries(rawData).filter(([key]) => allowedFields.includes(key)));
     if (category) {
       const matchedCategory = await this.prisma.category.findFirst({

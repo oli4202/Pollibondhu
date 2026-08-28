@@ -8,9 +8,8 @@ import {
   uploadDocument,
   getTimeline,
   provideFeedback,
-  resubmitApplication,
 } from '../controllers/application.controller';
-import { authMiddleware, requirePermission, requireAnyPermission } from '../middleware/auth.middleware';
+import { authMiddleware, requirePermission } from '../middleware/auth.middleware';
 
 const router = Router();
 
@@ -27,7 +26,7 @@ router.get('/track/:trackingId', authMiddleware, requirePermission('application.
 router.get('/:id', authMiddleware, requirePermission('application.view'), getApplication);
 
 // Officer/admin: process application
-router.put('/:id/process', authMiddleware, requireAnyPermission('application.process', 'application.approve', 'application.reject'), processApplication);
+router.put('/:id/process', authMiddleware, requirePermission('application.process', 'application.approve', 'application.reject'), processApplication);
 
 // Upload document
 router.post('/:id/documents', authMiddleware, requirePermission('application.view'), uploadDocument);
@@ -37,8 +36,5 @@ router.get('/:id/timeline', authMiddleware, requirePermission('application.view'
 
 // Citizen: provide feedback
 router.post('/:id/feedback', authMiddleware, requirePermission('application.view'), provideFeedback);
-
-// Citizen: resubmit application
-router.post('/:id/resubmit', authMiddleware, requirePermission('application.view'), resubmitApplication);
 
 export default router;

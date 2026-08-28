@@ -17,7 +17,6 @@ interface Service {
   is_available: boolean;
   provider?: { full_name: string; email: string } | null;
   category?: { name: string } | null;
-  project_id?: number | null;
   created_at: string;
 }
 
@@ -27,7 +26,6 @@ export default function ServiceManagement() {
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
   const [viewService, setViewService] = useState<Service | null>(null);
-  const [projects, setProjects] = useState<any[]>([]);
   const { addToast } = useToast();
 
   async function fetchServices(page = 1) {
@@ -39,25 +37,7 @@ export default function ServiceManagement() {
     } catch { setServices([]); }
   }
 
-  useEffect(() => { 
-    fetchServices(); 
-    api.get('/admin/projects', { params: { limit: 100 } })
-      .then(res => setProjects(res.data.data?.data || []))
-      .catch(() => {});
-  }, [statusFilter]);
-
-  async function updateProjectLink(service_id: number, project_id: string) {
-    try {
-      await api.put(`/admin/services/${service_id}`, { project_id: project_id ? parseInt(project_id) : null });
-      addToast('Service project link updated');
-      fetchServices(meta.page);
-      if (viewService) {
-        setViewService({ ...viewService, project_id: project_id ? parseInt(project_id) : null });
-      }
-    } catch {
-      addToast('Failed to link project', 'error');
-    }
-  }
+  useEffect(() => { fetchServices(); }, [statusFilter]);
 
   async function approveService(id: number) {
     try {
@@ -173,17 +153,6 @@ export default function ServiceManagement() {
               <div className="flex justify-between border-b border-earth-100 pb-2"><span className="text-sm text-earth-500">Provider</span><span className="text-sm font-bold">{viewService.provider?.full_name || '—'}</span></div>
               <div className="flex justify-between border-b border-earth-100 pb-2"><span className="text-sm text-earth-500">Category</span><span className="text-sm font-bold">{viewService.category?.name || '—'}</span></div>
               <div className="flex justify-between border-b border-earth-100 pb-2"><span className="text-sm text-earth-500">Price</span><span className="text-sm font-bold">{viewService.price ? `৳${viewService.price}` : 'Free'}</span></div>
-              <div className="flex justify-between border-b border-earth-100 pb-2 items-center">
-                <span className="text-sm text-earth-500">Subsidizing Project</span>
-                <select 
-                  className="text-sm rounded border-earth-200 py-1 px-2 focus:ring-polli-500 max-w-[200px]"
-                  value={viewService.project_id || ''}
-                  onChange={(e) => updateProjectLink(viewService.service_id, e.target.value)}
-                >
-                  <option value="">None (Standard Service)</option>
-                  {projects.map(p => <option key={p.project_id} value={p.project_id}>{p.title}</option>)}
-                </select>
-              </div>
               <div className="flex justify-between"><span className="text-sm text-earth-500">Status</span><Badge variant={viewService.status === 'APPROVED' ? 'success' : viewService.status === 'PENDING' ? 'warning' : 'danger'}>{viewService.status}</Badge></div>
             </div>
             <div className="flex gap-2 mt-6">

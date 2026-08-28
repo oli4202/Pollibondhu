@@ -21,14 +21,12 @@ export async function listComplaints(req: AuthenticatedRequest, res: Response): 
     const limit = parseInt(req.query.limit as string) || 10;
     const status = req.query.status as string;
     const roles = req.user!.roles;
-    const isAdministrator = roles.some((role) => ['SUPER_ADMIN'].includes(role));
+    const isAdministrator = roles.some((role) => ['ADMIN', 'SUPER_ADMIN', 'SUB_ADMIN'].includes(role));
     const isOfficer = roles.includes('OFFICER');
-    const isGovProvider = roles.includes('GOV_SERVICE_PROVIDER');
-    // GOV_SERVICE_PROVIDER and admins see all complaints; others see only their own
     const result = await complaintService.listComplaints({
       page, limit, status,
-      user_id: (isAdministrator || isOfficer || isGovProvider) ? undefined : req.user!.user_id,
-      assigned_to: isOfficer && !isAdministrator && !isGovProvider ? req.user!.user_id : undefined,
+      user_id: isAdministrator || isOfficer ? undefined : req.user!.user_id,
+      assigned_to: isOfficer && !isAdministrator ? req.user!.user_id : undefined,
     });
     sendSuccess(res, result);
   } catch (err: any) {

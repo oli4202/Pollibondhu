@@ -11,43 +11,22 @@ const quickLinks = [
   { label: 'Community Post', note: 'Ask your neighbours', to: '/community', emoji: '💬', color: '#FF9700' },
   { label: 'My Profile', note: 'Keep details current', to: '/dashboard/profile', emoji: '👤', color: '#980FF5' },
 ];
-
-const getActivityUrl = (type: string, id?: number) => {
-  const t = (type || '').toUpperCase();
-  if (t === 'APPLICATION') return '/dashboard/applications';
-  if (t === 'COMPLAINT') return '/dashboard/complaints';
-  if (t === 'MESSAGE' || t === 'CHAT') return '/dashboard/messages';
-  if (t === 'SERVICE' && id) return `/services/${id}`;
-  if (t === 'COMMUNITY' || t === 'FORUM') return `/community`;
-  return '#';
-};
-
+const initialAnnouncements = [
+  { id: 1, type: 'Agriculture', badgeClass: 'bg-emerald-100 text-emerald-700', text: 'Boro paddy subsidy applications are open until Dec 31.' },
+  { id: 2, type: 'Citizen', badgeClass: 'bg-blue-100 text-blue-700', text: 'New smart NID card distribution is available locally.' },
+  { id: 3, type: 'Alert', badgeClass: 'bg-rose-100 text-rose-700', text: 'Protect your crops if heavy rain arrives tonight.' },
+];
 
 export default function UserDashboard() {
   const { user } = useAuth();
   const [weather, setWeather] = useState<Weather | null>(null);
-  const [announcements, setAnnouncements] = useState<any[]>([]);
+  const [announcements, setAnnouncements] = useState(initialAnnouncements);
   const [activities, setActivities] = useState<any[]>([]);
 
   useEffect(() => { api.get('/agriculture/weather').then(res => setWeather(res.data.data)).catch(() => undefined); }, []);
   useEffect(() => {
     const loadActivity = () => api.get('/users/activity').then(res => setActivities(res.data.data || [])).catch(() => undefined);
-    const loadAnnouncements = () => api.get('/notifications').then(res => {
-      const notifs = res.data.data?.notifications || res.data.notifications || [];
-      const formatted = notifs
-        .filter((n: any) => n.type === 'SYSTEM' || n.type === 'ANNOUNCEMENT' || n.type === 'COMMUNITY_POST' || n.type === 'IN_APP')
-        .slice(0, 3)
-        .map((n: any) => ({
-          id: n.notification_id,
-          type: n.type === 'COMMUNITY_POST' ? 'Community' : 'Alert',
-          badgeClass: n.type === 'COMMUNITY_POST' ? 'bg-blue-100 text-blue-700' : 'bg-rose-100 text-rose-700',
-          text: n.title
-        }));
-      setAnnouncements(formatted);
-    }).catch(() => undefined);
-    
     loadActivity();
-    loadAnnouncements();
     const timer = window.setInterval(loadActivity, 10000);
     return () => window.clearInterval(timer);
   }, []);
@@ -98,7 +77,7 @@ export default function UserDashboard() {
           <div className="mt-3 divide-y divide-earth-100">
             {activities.length === 0 ? <p className="py-3 text-sm text-earth-400">No recent activity.</p> : activities.map((activity: any, index) => {
               const color = index % 2 ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700';
-              return <Link to={getActivityUrl(activity.entity_type, activity.entity_id)} key={activity.activity_id} className="flex items-center gap-3 py-3 hover:bg-earth-50 px-2 -mx-2 rounded-lg transition-colors cursor-pointer">
+              return <div key={activity.activity_id} className="flex items-center gap-3 py-3">
                 <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${color}`}>
                   <FileText size={17} />
                 </div>
@@ -107,7 +86,7 @@ export default function UserDashboard() {
                   <p className="truncate text-xs text-earth-400">{new Date(activity.created_at).toLocaleString()}</p>
                 </div>
                 <span className={`rounded-full px-2 py-1 text-[10px] font-bold ${color}`}>{activity.entity_type.replace('_', ' ')}</span>
-              </Link>
+              </div>
             })}
           </div>
         </section>

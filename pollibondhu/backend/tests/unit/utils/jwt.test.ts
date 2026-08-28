@@ -16,7 +16,7 @@ describe('JWT utilities', () => {
     const token = generateAccessToken(payload);
     const decoded = verifyAccessToken(token) as any;
     expect(decoded).toMatchObject(payload);
-    expect(decoded.exp! - decoded.iat!).toBe(2 * 60 * 60); // 2 hours
+    expect(decoded.exp! - decoded.iat!).toBe(15 * 60); // 15 minutes
   });
 
   it('round-trips a refresh token with a longer lifetime', () => {

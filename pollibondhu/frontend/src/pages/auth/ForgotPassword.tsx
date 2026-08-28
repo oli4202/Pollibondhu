@@ -14,6 +14,7 @@ export default function ForgotPassword() {
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
   const [otp, setOtp] = useState('');
+  const [otpVerified, setOtpVerified] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [resetLoading, setResetLoading] = useState(false);
@@ -87,11 +88,13 @@ export default function ForgotPassword() {
               <ArrowLeft size={14} /> Back to Login
             </Link>
             <CardTitle className="text-2xl">
-              {sent ? 'Enter Reset Code & New Password' : 'Forgot Password?'}
+              {sent ? (otpVerified ? 'Set New Password' : 'Enter Reset Code') : 'Forgot Password?'}
             </CardTitle>
             <p className="mt-1 text-sm text-earth-500">
               {sent
-                ? 'Enter the 6-digit code sent to your email and your new password.'
+                ? otpVerified
+                  ? 'Enter your new password below.'
+                  : 'Enter the 6-digit code sent to your email.'
                 : "Enter your email address and we'll send you a reset code."
               }
             </p>
@@ -117,8 +120,12 @@ export default function ForgotPassword() {
                   {loading ? 'Sending...' : 'Send Reset Code'}
                 </Button>
               </form>
-            ) : (
-              <form onSubmit={handleResetPassword} className="space-y-4">
+            ) : !otpVerified ? (
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                if (otp.length >= 6) setOtpVerified(true);
+                else addToast('Please enter the 6-digit code', 'error');
+              }} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-earth-700 mb-1">Reset Code</label>
                   <input
@@ -127,13 +134,26 @@ export default function ForgotPassword() {
                     onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
                     placeholder="000000"
                     maxLength={6}
-                    required
                     className="w-full rounded-xl border border-earth-200 bg-white px-4 py-3 text-center text-2xl tracking-[0.5em] font-mono text-earth-900 placeholder:text-earth-300 focus:outline-none focus:ring-2 focus:ring-polli-500"
                   />
                   <p className="mt-2 text-xs text-earth-400 text-center">
                     Check your email inbox (and spam folder)
                   </p>
                 </div>
+                <Button type="submit" disabled={otp.length < 6} className="w-full">
+                  Verify Code
+                </Button>
+                <button
+                  type="button"
+                  onClick={handleSendOtp}
+                  disabled={loading}
+                  className="w-full text-center text-sm text-polli-600 hover:text-polli-700 font-medium"
+                >
+                  {loading ? 'Sending...' : 'Resend code'}
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleResetPassword} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-earth-700 mb-1">New Password</label>
                   <input
@@ -165,17 +185,13 @@ export default function ForgotPassword() {
                     <p className="mt-1 text-xs text-red-500">Passwords do not match</p>
                   )}
                 </div>
-                <Button type="submit" disabled={resetLoading || otp.length < 6 || !newPassword || !confirmPassword} className="w-full">
+                <div className="flex items-center gap-2 rounded-xl bg-green-50 p-3 text-xs text-green-700">
+                  <CheckCircle size={16} />
+                  Code verified successfully
+                </div>
+                <Button type="submit" disabled={resetLoading || !newPassword || !confirmPassword} className="w-full">
                   {resetLoading ? 'Resetting...' : 'Reset Password'}
                 </Button>
-                <button
-                  type="button"
-                  onClick={handleSendOtp}
-                  disabled={loading}
-                  className="w-full text-center text-sm text-polli-600 hover:text-polli-700 font-medium"
-                >
-                  {loading ? 'Sending...' : 'Resend code'}
-                </button>
               </form>
             )}
 

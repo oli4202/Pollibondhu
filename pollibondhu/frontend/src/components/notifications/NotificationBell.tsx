@@ -233,7 +233,6 @@ export default function NotificationBell() {
                       else if (n.type === 'COMPLAINT') navigate('/dashboard/complaints');
                       else if (n.type === 'MESSAGE') navigate('/dashboard/messages');
                       else if (n.type === 'COMMUNITY_POST') navigate('/community');
-                      else navigate('/dashboard/notifications');
                     }}
                     className={`w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-earth-50 transition-colors border-b border-earth-50 last:border-0 ${
                       !n.is_read ? 'bg-polli-50/30' : ''

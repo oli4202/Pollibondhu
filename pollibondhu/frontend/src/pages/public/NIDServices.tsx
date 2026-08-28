@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { CreditCard, ArrowLeft, FileText, Clock, CheckCircle, Sparkles } from 'lucide-react';
+import { CreditCard, ArrowLeft, FileText, Clock, CheckCircle } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import api from '@/utils/api';
@@ -36,21 +36,6 @@ export default function NIDServices() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [trackingId, setTrackingId] = useState('');
-
-  const handleAutoFill = () => {
-    setServiceType(serviceTypes[1]); // NID Correction
-    setFullName('John Doe');
-    setFullNameBn('জন ডো');
-    setNidNo('12345678901234567');
-    setBirthDate('1990-01-01');
-    setFatherName('Richard Doe');
-    setMotherName('Jane Smith');
-    setDistrict('Dhaka');
-    setUpazila('Mirpur');
-    setAddress('Section 10, Mirpur, Dhaka');
-    setPhone('01712345678');
-    setCorrections('Name spelling needs to be corrected from Jhon to John.');
-  };
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -152,16 +137,7 @@ export default function NIDServices() {
 
           {/* Service Type */}
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-earth-700">Service Type *</label>
-              <button 
-                type="button" 
-                onClick={handleAutoFill}
-                className="text-xs px-3 py-1 bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100 rounded-lg font-medium transition flex items-center gap-1 shadow-sm"
-              >
-                <Sparkles size={12} /> Auto-Fill Demo
-              </button>
-            </div>
+            <label className="block text-sm font-medium text-earth-700 mb-2">Service Type *</label>
             <select
               value={serviceType}
               onChange={(e) => setServiceType(e.target.value)}

@@ -7,6 +7,7 @@ import type { Permission } from '@/types';
 import PublicLayout from '@/components/layout/PublicLayout';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import AdminLayout from '@/components/layout/AdminLayout';
+import OfficerLayout from '@/components/layout/OfficerLayout';
 
 // Route pages are loaded on demand to keep the initial application bundle small.
 const Home = lazy(() => import('@/pages/public/Home'));
@@ -44,11 +45,13 @@ const MyComplaints = lazy(() => import('@/pages/user/MyComplaints'));
 const MyMessages = lazy(() => import('@/pages/user/MyMessages'));
 const MyNotifications = lazy(() => import('@/pages/user/MyNotifications'));
 const ProviderDashboard = lazy(() => import('@/pages/provider/ProviderDashboard'));
-const ProviderProfile = lazy(() => import('@/pages/provider/ProviderProfile'));
 const ProviderServices = lazy(() => import('@/pages/provider/ProviderServices'));
 const ProviderMessages = lazy(() => import('@/pages/provider/ProviderMessages'));
 const ProviderComplaints = lazy(() => import('@/pages/provider/ProviderComplaints'));
-const ProviderApplications = lazy(() => import('@/pages/provider/ProviderApplications'));
+const OfficerDashboardPage = lazy(() => import('@/pages/officer/OfficerDashboard'));
+const OfficerApplications = lazy(() => import('@/pages/officer/OfficerApplications'));
+const OfficerComplaints = lazy(() => import('@/pages/officer/OfficerComplaints'));
+const OfficerMessages = lazy(() => import('@/pages/officer/OfficerMessages'));
 const RoleBasedDashboard = lazy(() => import('@/components/layout/RoleBasedDashboard'));
 const UserManagement = lazy(() => import('@/pages/admin/UserManagement'));
 const ServiceManagement = lazy(() => import('@/pages/admin/ServiceManagement'));
@@ -106,35 +109,6 @@ function Protected({
   return children;
 }
 
-function RootRedirect() {
-  const { user, isLoading, hasRole, hasAnyPermission } = useAuth();
-
-  if (isLoading) {
-    return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-polli-500 border-t-transparent" />
-      </div>
-    );
-  }
-
-  if (!user) {
-    return <Home />;
-  }
-
-  // Admin routing
-  if (hasAnyPermission('dashboard.admin.view', 'dashboard.super.view', 'dashboard.subadmin.view')) {
-    return <Navigate to="/admin" replace />;
-  }
-  // Provider routing
-  if (hasRole('PROVIDER', 'SERVICE_PROVIDER', 'GOV_SERVICE_PROVIDER')) {
-    return <Navigate to="/provider" replace />;
-  }
-  
-  // Default to citizen dashboard
-  return <Navigate to="/dashboard" replace />;
-}
-
-
 export default function AppRoutes() {
   return (
     <Suspense fallback={<div className="flex h-screen items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-4 border-polli-500 border-t-transparent" /></div>}>
@@ -143,7 +117,7 @@ export default function AppRoutes() {
       {/* PUBLIC ROUTES                                */}
       {/* ============================================ */}
       <Route element={<PublicLayout />}>
-        <Route path="/" element={<RootRedirect />} />
+        <Route path="/" element={<Home />} />
         <Route path="/agriculture" element={<AgriculturePage />} />
         <Route path="/services" element={<ServicesPage />} />
         <Route path="/community" element={<CommunityPage />} />
@@ -190,11 +164,19 @@ export default function AppRoutes() {
       {/* ============================================ */}
       <Route path="/provider" element={<Protected roles={['PROVIDER', 'SERVICE_PROVIDER', 'GOV_SERVICE_PROVIDER', 'ADMIN']}><DashboardLayout /></Protected>}>
         <Route index element={<ProviderDashboard />} />
-        <Route path="profile" element={<ProviderProfile />} />
-        <Route path="applications" element={<ProviderApplications />} />
         <Route path="services" element={<ProviderServices />} />
         <Route path="messages" element={<ProviderMessages />} />
         <Route path="complaints" element={<ProviderComplaints />} />
+      </Route>
+
+      {/* ============================================ */}
+      {/* OFFICER DASHBOARD                            */}
+      {/* ============================================ */}
+      <Route element={<Protected anyPermission={['dashboard.officer.view']}><OfficerLayout /></Protected>}>
+        <Route path="/officer" element={<OfficerDashboardPage />} />
+        <Route path="/officer/applications" element={<OfficerApplications />} />
+        <Route path="/officer/complaints" element={<OfficerComplaints />} />
+        <Route path="/officer/messages" element={<OfficerMessages />} />
       </Route>
 
       {/* ============================================ */}
@@ -204,6 +186,7 @@ export default function AppRoutes() {
         <Route path="/admin" element={<RoleBasedDashboard />} />
         <Route path="/admin/users" element={<Protected permission="user.view"><UserManagement /></Protected>} />
         <Route path="/admin/services" element={<Protected permission="service.view"><ServiceManagement /></Protected>} />
+        <Route path="/admin/complaints" element={<Protected permission="complaint.view"><ComplaintResolution /></Protected>} />
         <Route path="/admin/departments" element={<Protected permission="department.view"><DepartmentManagement /></Protected>} />
         <Route path="/admin/projects" element={<Protected permission="project.view"><ProjectManagement /></Protected>} />
         <Route path="/admin/budgets" element={<Protected permission="budget.view"><BudgetManagement /></Protected>} />

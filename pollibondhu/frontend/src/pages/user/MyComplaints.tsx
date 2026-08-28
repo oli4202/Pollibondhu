@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, Plus, ChevronRight, X, MapPin, Sparkles, Bot, Loader2, CheckCircle2, MessageSquare } from 'lucide-react';
+import { AlertTriangle, Plus, ChevronRight, X, MapPin, Sparkles, Bot, Loader2, CheckCircle2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/Card';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { Badge } from '@/components/ui/Badge';
@@ -19,9 +18,6 @@ interface Complaint {
   priority: string;
   created_at: string;
   description?: string;
-  provider_id?: number;
-  provider?: { full_name: string };
-  conversation_id?: number;
 }
 
 const categoryOptions = [
@@ -74,23 +70,19 @@ export default function MyComplaints() {
   const [showForm, setShowForm] = useState(false);
   const [sending, setSending] = useState(false);
   const { addToast } = useToast();
-  const [form, setForm] = useState<{ category: string; subject: string; description: string; priority: string; location: string; provider_id?: number }>({
+  const [form, setForm] = useState({
     category: '', subject: '', description: '', priority: 'MEDIUM', location: '',
   });
   const [correctingField, setCorrectingField] = useState<'subject' | 'description' | null>(null);
 
-  const [providers, setProviders] = useState<{user_id: number; full_name: string; role: string}[]>([]);
-  const navigate = useNavigate();
-
   useEffect(() => {
-    api.get('/chat/complaints')
-      .then(res => setComplaints(res.data.data || []))
+    api.get('/complaints')
+      .then(res => {
+        const data = res.data;
+        setComplaints(data.data?.data || data.complaints || (Array.isArray(data) ? data : []));
+      })
       .catch(() => setComplaints([]))
       .finally(() => setLoading(false));
-
-    api.get('/users?role=PROVIDER,SERVICE_PROVIDER,GOV_SERVICE_PROVIDER')
-      .then(res => setProviders(res.data.data || []))
-      .catch(() => {});
   }, []);
 
   async function aiCorrectField(field: 'subject' | 'description') {
@@ -128,25 +120,24 @@ export default function MyComplaints() {
   }
 
   async function handleSubmit() {
-    if (!form.provider_id || !form.category || !form.subject || !form.description) {
-      addToast('Please select a provider and fill all required fields', 'error');
+    if (!form.category || !form.subject || !form.description) {
+      addToast('Please fill all required fields', 'error');
       return;
     }
     setSending(true);
     try {
-      await api.post('/chat/complaints', {
-        provider_id: form.provider_id,
+      await api.post('/complaints', {
         category: form.category,
         subject: form.subject,
         description: form.description + (form.location ? `\n\nLocation: ${form.location}` : ''),
         priority: form.priority,
       });
-      addToast('Complaint submitted successfully! You can track it in Messages.', 'success');
+      addToast('Complaint submitted successfully! You will receive a notification when it is reviewed.', 'success');
       setShowForm(false);
-      setForm({ category: '', subject: '', description: '', priority: 'MEDIUM', location: '', provider_id: '' } as any);
+      setForm({ category: '', subject: '', description: '', priority: 'MEDIUM', location: '' });
       // Refresh
-      const res = await api.get('/chat/complaints');
-      setComplaints(res.data.data || []);
+      const res = await api.get('/complaints');
+      setComplaints(res.data.data?.data || []);
     } catch (err: any) {
       addToast(err.response?.data?.error || 'Failed to submit complaint', 'error');
     } finally { setSending(false); }
@@ -169,20 +160,8 @@ export default function MyComplaints() {
         <Card className="border-polli-200">
           <CardContent className="p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold flex items-center gap-2"><AlertTriangle size={18} className="text-amber-500" /> File a Complaint</h2>
+              <h2 className="text-lg font-semibold">File a Complaint</h2>
               <button onClick={() => setShowForm(false)} className="text-earth-400 hover:text-earth-600"><X size={20} /></button>
-            </div>
-
-            {/* Provider Dropdown */}
-            <div>
-              <label className="block text-sm font-medium text-earth-700 mb-2">To Provider *</label>
-              <select value={(form as any).provider_id || ''} onChange={e => setForm(f => ({ ...f, provider_id: Number(e.target.value) }))}
-                className="w-full border border-earth-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-polli-500">
-                <option value="">Select a provider...</option>
-                {providers.map(p => (
-                  <option key={p.user_id} value={p.user_id}>{p.full_name} ({p.role.replace(/_/g, ' ')})</option>
-                ))}
-              </select>
             </div>
 
             {/* Category Dropdown */}
@@ -311,11 +290,7 @@ export default function MyComplaints() {
       ) : (
         <div className="space-y-3">
           {complaints.map((c) => (
-            <Card key={c.complaint_id} onClick={() => {
-              if (c.conversation_id) {
-                navigate('/dashboard/messages', { state: { conversationId: c.conversation_id } });
-              }
-            }} className="card-hover cursor-pointer border-earth-200 hover:border-polli-300">
+            <Card key={c.complaint_id} className="card-hover cursor-pointer">
               <CardContent className="p-5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -326,7 +301,7 @@ export default function MyComplaints() {
                       <h3 className="text-sm font-bold">{c.subject}</h3>
                       <div className="flex items-center gap-2 mt-1">
                         <Badge>{c.category}</Badge>
-                        {c.provider && <span className="text-xs font-semibold text-earth-600">To: {c.provider.full_name}</span>}
+                        <span className="text-xs text-earth-400 font-mono">#{c.complaint_id}</span>
                         <span className="text-xs text-earth-400">· {new Date(c.created_at).toLocaleDateString()}</span>
                       </div>
                     </div>
@@ -334,7 +309,6 @@ export default function MyComplaints() {
                   <div className="flex items-center gap-3">
                     <Badge variant={c.priority === 'HIGH' || c.priority === 'CRITICAL' ? 'danger' : c.priority === 'MEDIUM' ? 'warning' : 'default'}>{c.priority}</Badge>
                     <StatusBadge status={c.status} />
-                    {c.conversation_id && <MessageSquare size={16} className="text-polli-500" />}
                     <ChevronRight size={16} className="text-earth-400" />
                   </div>
                 </div>

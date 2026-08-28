@@ -2,15 +2,13 @@ import { PrismaClient } from '@prisma/client';
 import { ApplicationRepository } from '../repositories/application.repository';
 import { appEventSubject } from '../patterns/observer/NotificationSubject';
 import { logger } from '../patterns/singleton/Logger';
-import { createAndPushNotification } from '../utils/notification.util';
-import { pdfService } from './pdf.service';
 
 /** Valid status transitions */
 const VALID_TRANSITIONS: Record<string, string[]> = {
   SUBMITTED: ['REVIEWING', 'REJECTED'],
   REVIEWING: ['ADDITIONAL_DOCS_REQUIRED', 'IN_PROGRESS', 'REJECTED'],
   ADDITIONAL_DOCS_REQUIRED: ['RESUBMITTED'],
-  RESUBMITTED: ['REVIEWING', 'IN_PROGRESS', 'APPROVED', 'REJECTED'],
+  RESUBMITTED: ['REVIEWING'],
   IN_PROGRESS: ['APPROVED', 'REJECTED'],
   APPROVED: ['CLOSED'],
   REJECTED: ['CLOSED'],
@@ -56,41 +54,15 @@ export class ApplicationService {
       notes: 'Application submitted',
     });
 
-    // Create real-time notification for citizen
-    await createAndPushNotification(
-      user_id,
-      'APPLICATION',
-      'Application Submitted',
-      `Your application ${tracking_id} has been submitted successfully.`
-    );
-
-    // Notify the provider: either specific service provider or the GOV_SERVICE_PROVIDER
-    if (data.service_id) {
-      const service = await this.prisma.service.findUnique({
-        where: { service_id: data.service_id }
-      });
-      if (service && service.provider_id) {
-        await createAndPushNotification(
-          service.provider_id,
-          'APPLICATION',
-          'New Service Request',
-          `New application (${tracking_id}) submitted for: ${service.title}.`
-        );
-      }
-    } else {
-      // No specific service — notify GOV_SERVICE_PROVIDER
-      const govProvider = await this.prisma.user.findFirst({
-        where: { role: 'GOV_SERVICE_PROVIDER', is_active: true }
-      });
-      if (govProvider) {
-        await createAndPushNotification(
-          govProvider.user_id,
-          'APPLICATION',
-          'New Citizen Application',
-          `New government service application (${tracking_id}) submitted by a citizen.`
-        );
-      }
-    }
+    // Create notification for citizen
+    await this.prisma.notification.create({
+      data: {
+        user_id,
+        type: 'IN_APP',
+        title: 'Application Submitted',
+        message: `Your application ${tracking_id} has been submitted successfully.`,
+      },
+    });
 
     return application;
   }
@@ -129,34 +101,6 @@ export class ApplicationService {
 
     const updated = await this.repo.update(application_id, updateData);
 
-    // Dynamic Budget Spending Logic
-    if (status === 'RESOLVED' && existing.service_id) {
-      const service = await this.prisma.service.findUnique({
-        where: { service_id: existing.service_id },
-        select: { price: true, project_id: true, title: true }
-      });
-
-      if (service?.project_id && service.price) {
-        // Increment spent amount
-        const project = await this.prisma.project.update({
-          where: { project_id: service.project_id },
-          data: {
-            spent: { increment: service.price }
-          }
-        });
-        
-        // Recalculate progress
-        if (project.budget && Number(project.budget) > 0) {
-          const newProgress = Math.min(100, Math.floor((Number(project.spent) / Number(project.budget)) * 100));
-          await this.prisma.project.update({
-            where: { project_id: service.project_id },
-            data: { progress: newProgress }
-          });
-        }
-        logger.info(`Deducted ৳${service.price} from Project ${service.project_id} for Service ${service.title}`);
-      }
-    }
-
     // Record the status change
     await this.repo.addUpdate(application_id, {
       user_id: officer_id,
@@ -176,40 +120,18 @@ export class ApplicationService {
     };
 
     if (statusMessages[status]) {
-      await createAndPushNotification(
-        existing.user_id,
-        'APPLICATION',
-        `Application ${status.replace(/_/g, ' ').toLowerCase()}`,
-        `Your application ${existing.tracking_id} ${statusMessages[status]}.`
-      );
+      await this.prisma.notification.create({
+        data: {
+          user_id: existing.user_id,
+          type: 'IN_APP',
+          title: `Application ${status.replace(/_/g, ' ').toLowerCase()}`,
+          message: `Your application ${existing.tracking_id} ${statusMessages[status]}.`,
+        },
+      });
     }
 
     // Trigger observer for approved applications
     if (status === 'APPROVED') {
-      // Generate PDF Certificate
-      try {
-        const fileUrl = await pdfService.generateCertificate({
-          application_id: existing.application_id,
-          tracking_id: existing.tracking_id,
-          service_title: existing.service?.title || 'Gov Service',
-          applicant_name: existing.user?.full_name || existing.applicant_name || 'Citizen',
-          approved_at: new Date(),
-        });
-        
-        await this.prisma.applicationDocument.create({
-          data: {
-            application_id: existing.application_id,
-            user_id: existing.user_id,
-            doc_type: 'CERTIFICATE',
-            file_name: `Certificate - ${existing.tracking_id}`,
-            file_url: fileUrl,
-            status: 'VERIFIED',
-          }
-        });
-      } catch (err) {
-        logger.error(`Failed to generate PDF for application ${existing.application_id}: ${err}`);
-      }
-
       await appEventSubject.notify({
         type: 'APPLICATION_APPROVED',
         payload: {
@@ -255,7 +177,6 @@ export class ApplicationService {
     user_id?: number;
     service_id?: number;
     department_id?: number;
-    provider_id?: number;
   }) {
     return this.repo.findAll(options);
   }
@@ -311,32 +232,5 @@ export class ApplicationService {
       citizen_feedback: feedback,
       status: 'CLOSED',
     });
-  }
-
-  /**
-   * Citizen resubmits application with additional information
-   */
-  async resubmitApplication(application_id: number, user_id: number, message: string) {
-    logger.info(`User ${user_id} resubmitting application ${application_id}`);
-
-    const existing = await this.repo.findById(application_id);
-    if (!existing) throw new Error('Application not found');
-    if (existing.user_id !== user_id) throw new Error('Unauthorized');
-    if (existing.status !== 'ADDITIONAL_DOCS_REQUIRED') {
-      throw new Error('Application is not waiting for additional documents');
-    }
-
-    const updated = await this.repo.update(application_id, {
-      status: 'RESUBMITTED',
-    });
-
-    await this.repo.addUpdate(application_id, {
-      user_id,
-      old_status: 'ADDITIONAL_DOCS_REQUIRED',
-      new_status: 'RESUBMITTED',
-      notes: message || 'Provided additional information/documents',
-    });
-
-    return updated;
   }
 }

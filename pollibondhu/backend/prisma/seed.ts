@@ -57,6 +57,8 @@ const PERMISSIONS = [
   { name: 'budget.approve', module: 'budget', description: 'Approve budgets' },
   // Dashboard
   { name: 'dashboard.super.view', module: 'dashboard', description: 'View super admin dashboard' },
+  { name: 'dashboard.admin.view', module: 'dashboard', description: 'View admin dashboard' },
+  { name: 'dashboard.subadmin.view', module: 'dashboard', description: 'View sub-admin dashboard' },
   { name: 'dashboard.officer.view', module: 'dashboard', description: 'View officer dashboard' },
   { name: 'dashboard.citizen.view', module: 'dashboard', description: 'View citizen dashboard' },
   // Messaging
@@ -120,6 +122,22 @@ const PERMISSIONS = [
 // ============================================
 const ROLE_PERMISSIONS: Record<string, string[]> = {
   SUPER_ADMIN: PERMISSIONS.map(p => p.name), // All permissions
+  SUB_ADMIN: [
+    'user.view', 'complaint.view', 'complaint.assign', 'complaint.update', 'complaint.resolve',
+    'application.view', 'application.process', 'application.approve', 'application.reject',
+    'budget.view', 'budget.create', 'budget.update',
+    'dashboard.subadmin.view',
+    'message.send', 'message.receive', 'message.group_create', 'message.department_chat',
+    'service.view', 'service.create', 'service.update', 'service.approve', 'service.reject',
+    'project.view', 'project.create', 'project.update',
+    'department.view', 'department.update', 'department.manage_officers',
+    'notification.broadcast',
+    'agriculture.view', 'agriculture.create', 'agriculture.update',
+    'education.view', 'institution.manage',
+    'ngo.view', 'event.view', 'event.create', 'news.view', 'news.create', 'news.publish',
+    'waste.view', 'waste.manage', 'waste.zone.manage',
+    'emergency.view', 'emergency.manage',
+  ],
   OFFICER: [
     'user.view', 'complaint.view', 'complaint.update',
     'application.view', 'application.process', 'application.approve', 'application.reject',
@@ -132,15 +150,7 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
   ],
   SERVICE_PROVIDER: [
     'service.view', 'service.create', 'service.update', 'service.delete',
-    'application.view', 'application.create',
     'message.send', 'message.receive', 'dashboard.citizen.view',
-  ],
-  GOV_SERVICE_PROVIDER: [
-    'service.view', 'service.create', 'service.update', 'service.delete',
-    'application.view', 'application.create', 'application.process', 'application.approve', 'application.reject',
-    'complaint.view', 'complaint.update', 'complaint.resolve', 'complaint.assign',
-    'message.send', 'message.receive', 'message.group_create',
-    'dashboard.citizen.view', 'notification.broadcast',
   ],
   NGO_ADMIN: [
     'ngo.view', 'ngo.manage', 'programme.view', 'programme.create', 'programme.enroll',
@@ -157,7 +167,6 @@ const ROLE_PERMISSIONS: Record<string, string[]> = {
     'message.send', 'message.receive', 'dashboard.citizen.view', 'education.view',
   ],
   CITIZEN: [
-    'service.view',
     'complaint.create', 'complaint.view', 'complaint.verify', 'complaint.close',
     'application.view', 'application.create', 'project.view', 'project.feedback',
     'message.send', 'message.receive', 'dashboard.citizen.view',
@@ -174,7 +183,7 @@ async function main() {
   // Seed Roles
   // ============================================
   console.log('  📋 Seeding roles...');
-  const roleNames = ['SUPER_ADMIN', 'OFFICER', 'SERVICE_PROVIDER', 'GOV_SERVICE_PROVIDER', 'NGO_ADMIN', 'INSTITUTION_ADMIN', 'TEACHER', 'CITIZEN'];
+  const roleNames = ['SUPER_ADMIN', 'SUB_ADMIN', 'OFFICER', 'SERVICE_PROVIDER', 'NGO_ADMIN', 'INSTITUTION_ADMIN', 'TEACHER', 'CITIZEN'];
   const roles: Record<string, number> = {};
   for (const name of roleNames) {
     const role = await prisma.role.upsert({
@@ -256,6 +265,34 @@ async function main() {
     create: { user_id: superAdmin.user_id, role_id: roles['SUPER_ADMIN'] },
   });
 
+  // Admin (Sub-Admin)
+  const admin = await prisma.user.upsert({
+    where: { email: 'admin@pollibondhu.test' },
+    update: {},
+    create: {
+      email: 'admin@pollibondhu.test',
+      password_hash: await hashPassword('admin123'),
+      full_name: 'System Administrator',
+      phone: '01710000000',
+      nid: '1234567890',
+      role: 'SUB_ADMIN',
+      district: 'Dhaka',
+      division: 'Dhaka',
+      is_active: true,
+    },
+  });
+  await prisma.userRole.upsert({
+    where: { user_id_role_id: { user_id: admin.user_id, role_id: roles['SUB_ADMIN'] } },
+    update: {},
+    create: { user_id: admin.user_id, role_id: roles['SUB_ADMIN'] },
+  });
+  // Assign admin to Agriculture department
+  await prisma.userDepartment.upsert({
+    where: { user_id_department_id: { user_id: admin.user_id, department_id: departments['Agriculture'] } },
+    update: {},
+    create: { user_id: admin.user_id, department_id: departments['Agriculture'] },
+  });
+
   // Officer
   const officer = await prisma.user.upsert({
     where: { email: 'officer@pollibondhu.test' },
@@ -283,27 +320,21 @@ async function main() {
     create: { user_id: officer.user_id, department_id: departments['Agriculture'] },
   });
 
-  // Provider — GOV_SERVICE_PROVIDER handles all citizen government services
+  // Provider
   const provider = await prisma.user.upsert({
     where: { email: 'provider@pollibondhu.test' },
-    update: { role: 'GOV_SERVICE_PROVIDER' },
+    update: {},
     create: {
       email: 'provider@pollibondhu.test',
       password_hash: await hashPassword('provider123'),
-      full_name: 'PolliBondhu Gov Services',
+      full_name: 'Karim Agro Services',
       phone: '01711111111',
       nid: '9876543210',
-      role: 'GOV_SERVICE_PROVIDER',
+      role: 'SERVICE_PROVIDER',
       district: 'Rajshahi',
       division: 'Rajshahi',
       is_active: true,
     },
-  });
-  // Assign both SERVICE_PROVIDER and GOV_SERVICE_PROVIDER roles
-  await prisma.userRole.upsert({
-    where: { user_id_role_id: { user_id: provider.user_id, role_id: roles['GOV_SERVICE_PROVIDER'] } },
-    update: {},
-    create: { user_id: provider.user_id, role_id: roles['GOV_SERVICE_PROVIDER'] },
   });
   await prisma.userRole.upsert({
     where: { user_id_role_id: { user_id: provider.user_id, role_id: roles['SERVICE_PROVIDER'] } },
@@ -331,10 +362,10 @@ async function main() {
 
   // Categories
   const [agriCat, citizenCat, forumCat, healthCat] = await Promise.all([
-    prisma.category.upsert({ where: { name: 'Agriculture' }, update: {}, create: { name: 'Agriculture', type: 'SERVICE', is_active: true } }),
-    prisma.category.upsert({ where: { name: 'Citizen' }, update: {}, create: { name: 'Citizen', type: 'SERVICE', is_active: true } }),
-    prisma.category.upsert({ where: { name: 'General' }, update: {}, create: { name: 'General', type: 'FORUM', is_active: true } }),
-    prisma.category.upsert({ where: { name: 'Health' }, update: {}, create: { name: 'Health', type: 'SERVICE', is_active: true } }),
+    prisma.category.create({ data: { name: 'Agriculture', type: 'SERVICE', is_active: true } }),
+    prisma.category.create({ data: { name: 'Citizen', type: 'SERVICE', is_active: true } }),
+    prisma.category.create({ data: { name: 'General', type: 'FORUM', is_active: true } }),
+    prisma.category.create({ data: { name: 'Health', type: 'SERVICE', is_active: true } }),
   ]);
 
   // Crops
@@ -346,38 +377,13 @@ async function main() {
     prisma.crop.create({ data: { name: 'Wheat', name_bn: 'গম', season: 'Rabi', description: 'Sow by mid-November. Use BARI Gom-28 for higher yield.', category_id: agriCat.category_id } }),
   ]);
 
-  // Government Services — all under provider@pollibondhu.test
-  // Delete existing gov services (by title) and recreate so IDs are stable
-  const govServiceTitles = [
-    'NID Application', 'Birth Registration', 'NID Correction', 'NID Duplicate',
-    'Death Certificate', 'Marriage Registration', 'Trade License', 'Land Record / Khatian',
-    'Income Certificate', 'Character Certificate', 'Health Card', 'Mobile Health Camp',
-    'Seed Supply', 'Power Tiller Rental', 'School Admission',
-  ];
-  await prisma.service.deleteMany({ where: { title: { in: govServiceTitles } } });
-  const govServices = await Promise.all([
-    prisma.service.create({ data: { provider_id: provider.user_id, category_id: citizenCat.category_id, title: 'NID Application', description: 'Apply for National Identity Card. Processing 5-7 working days.', price: 0, district: 'All Districts', status: 'APPROVED', is_available: true } }),
-    prisma.service.create({ data: { provider_id: provider.user_id, category_id: citizenCat.category_id, title: 'Birth Registration', description: 'Register a new birth and obtain official birth certificate.', price: 0, district: 'All Districts', status: 'APPROVED', is_available: true } }),
-    prisma.service.create({ data: { provider_id: provider.user_id, category_id: citizenCat.category_id, title: 'NID Correction', description: 'Correct information on your National ID card.', price: 50, district: 'All Districts', status: 'APPROVED', is_available: true } }),
-    prisma.service.create({ data: { provider_id: provider.user_id, category_id: citizenCat.category_id, title: 'NID Duplicate', description: 'Get a duplicate NID card if lost or damaged.', price: 100, district: 'All Districts', status: 'APPROVED', is_available: true } }),
-    prisma.service.create({ data: { provider_id: provider.user_id, category_id: citizenCat.category_id, title: 'Death Certificate', description: 'Register a death and get official death certificate.', price: 0, district: 'All Districts', status: 'APPROVED', is_available: true } }),
-    prisma.service.create({ data: { provider_id: provider.user_id, category_id: citizenCat.category_id, title: 'Marriage Registration', description: 'Register marriage and obtain official marriage certificate.', price: 0, district: 'All Districts', status: 'APPROVED', is_available: true } }),
-    prisma.service.create({ data: { provider_id: provider.user_id, category_id: citizenCat.category_id, title: 'Trade License', description: 'Apply for trade license for business operations.', price: 500, district: 'All Districts', status: 'APPROVED', is_available: true } }),
-    prisma.service.create({ data: { provider_id: provider.user_id, category_id: citizenCat.category_id, title: 'Land Record / Khatian', description: 'Access and verify land ownership khatian records.', price: 100, district: 'All Districts', status: 'APPROVED', is_available: true } }),
-    prisma.service.create({ data: { provider_id: provider.user_id, category_id: citizenCat.category_id, title: 'Income Certificate', description: 'Get official income certificate from Union Parishad.', price: 50, district: 'All Districts', status: 'APPROVED', is_available: true } }),
-    prisma.service.create({ data: { provider_id: provider.user_id, category_id: citizenCat.category_id, title: 'Character Certificate', description: 'Official character certificate from local government.', price: 20, district: 'All Districts', status: 'APPROVED', is_available: true } }),
-    prisma.service.create({ data: { provider_id: provider.user_id, category_id: healthCat.category_id, title: 'Health Card', description: 'Government health card for free/subsidized treatment.', price: 0, district: 'All Districts', status: 'APPROVED', is_available: true } }),
-    prisma.service.create({ data: { provider_id: provider.user_id, category_id: healthCat.category_id, title: 'Mobile Health Camp', description: 'Free health checkup camp registration for rural areas.', price: 0, district: 'All Districts', status: 'APPROVED', is_available: true } }),
-    prisma.service.create({ data: { provider_id: provider.user_id, category_id: agriCat.category_id, title: 'Seed Supply', description: 'Government certified quality seeds for farmers.', price: 85, district: 'All Districts', status: 'APPROVED', is_available: true } }),
-    prisma.service.create({ data: { provider_id: provider.user_id, category_id: agriCat.category_id, title: 'Power Tiller Rental', description: 'Rent government-assisted power tiller for farming.', price: 500, district: 'All Districts', status: 'APPROVED', is_available: true } }),
-    prisma.service.create({ data: { provider_id: provider.user_id, category_id: citizenCat.category_id, title: 'School Admission', description: 'Apply for government school admission for children.', price: 100, district: 'All Districts', status: 'APPROVED', is_available: true } }),
+  // Services
+  const services = await Promise.all([
+    prisma.service.create({ data: { provider_id: provider.user_id, category_id: agriCat.category_id, title: 'Power Tiller Rental', description: 'Rent power tiller for your field. 500 BDT per hour.', price: 500.00, district: 'Rajshahi', status: 'APPROVED', is_available: true } }),
+    prisma.service.create({ data: { provider_id: provider.user_id, category_id: agriCat.category_id, title: 'Seed Supply - BRRI Dhan28', description: 'High quality Boro paddy seeds available.', price: 85.00, district: 'Rajshahi', status: 'APPROVED', is_available: true } }),
+    prisma.service.create({ data: { provider_id: provider.user_id, category_id: citizenCat.category_id, title: 'Land Survey Service', description: 'Professional land measurement and khatian correction.', price: 1500.00, district: 'Rajshahi', status: 'PENDING', is_available: true } }),
+    prisma.service.create({ data: { provider_id: users[0].user_id, category_id: healthCat.category_id, title: 'Mobile Health Camp', description: 'Free health checkup camp in rural areas.', district: 'Dinajpur', status: 'APPROVED', is_available: true } }),
   ]);
-
-  // Log the real service IDs so frontend can be updated if needed
-  console.log('  📋 Government Service IDs:');
-  govServices.forEach((s, i) => console.log(`     [${s.service_id}] ${s.title}`));
-
-  const services = govServices;
 
   // Market Prices
   await Promise.all([
@@ -398,61 +404,53 @@ async function main() {
   await Promise.all([
     prisma.complaint.create({ data: { user_id: users[0].user_id, category: 'Infrastructure', subject: 'Road damage in Naichity', description: 'The main road to the bazaar is severely damaged.', status: 'PENDING', priority: 'HIGH' } }),
     prisma.complaint.create({ data: { user_id: users[1].user_id, category: 'Agriculture', subject: 'Fertilizer shortage', description: 'Local dealers are not getting enough urea supply.', status: 'REVIEWING', priority: 'MEDIUM' } }),
-    prisma.complaint.create({ data: { user_id: users[2].user_id, category: 'Health', subject: 'Doctor absent at Union Health Center', description: 'The assigned doctor has been absent for 3 days.', status: 'RESOLVED', priority: 'HIGH', reviewed_by: superAdmin.user_id, resolution_notes: 'Replacement doctor appointed.', resolved_at: new Date() } }),
+    prisma.complaint.create({ data: { user_id: users[2].user_id, category: 'Health', subject: 'Doctor absent at Union Health Center', description: 'The assigned doctor has been absent for 3 days.', status: 'RESOLVED', priority: 'HIGH', reviewed_by: admin.user_id, resolution_notes: 'Replacement doctor appointed.', resolved_at: new Date() } }),
   ]);
 
   // Expert
-  const expert = await prisma.expert.upsert({
-    where: { user_id: users[0].user_id },
-    update: {},
-    create: { user_id: users[0].user_id, specialization: 'Rice Cultivation', bio: '20 years experience in Boro and Aman paddy cultivation.', rating: 4.8, is_verified: true },
+  const expert = await prisma.expert.create({
+    data: { user_id: users[0].user_id, specialization: 'Rice Cultivation', bio: '20 years experience in Boro and Aman paddy cultivation.', rating: 4.8, is_verified: true },
   });
 
   // Weather
-  try {
-    await prisma.weather.deleteMany({});
-    await Promise.all([
-      prisma.weather.create({ data: { district: 'Dhaka', temperature: 28, condition: 'Partly Cloudy', humidity: 78, rainfall: 12, uv_index: 'High', updated_by: superAdmin.user_id } }),
-      prisma.weather.create({ data: { district: 'Rajshahi', temperature: 26, condition: 'Sunny', humidity: 65, rainfall: 0, uv_index: 'Very High', updated_by: superAdmin.user_id } }),
-      prisma.weather.create({ data: { district: 'Dinajpur', temperature: 24, condition: 'Foggy', humidity: 85, rainfall: 5, uv_index: 'Low', updated_by: superAdmin.user_id } }),
-    ]);
+  await Promise.all([
+    prisma.weather.create({ data: { district: 'Dhaka', temperature: 28, condition: 'Partly Cloudy', humidity: 78, rainfall: 12, uv_index: 'High', updated_by: admin.user_id } }),
+    prisma.weather.create({ data: { district: 'Rajshahi', temperature: 26, condition: 'Sunny', humidity: 65, rainfall: 0, uv_index: 'Very High', updated_by: admin.user_id } }),
+    prisma.weather.create({ data: { district: 'Dinajpur', temperature: 24, condition: 'Foggy', humidity: 85, rainfall: 5, uv_index: 'Low', updated_by: admin.user_id } }),
+  ]);
 
-    // Crop Advice
-    await prisma.cropAdvice.deleteMany({});
-    await Promise.all([
-      prisma.cropAdvice.create({ data: { expert_id: expert.expert_id, crop_id: crops[0].crop_id, title: 'Boro Paddy Sowing Guide', content: 'Sow seeds in seedbed by mid-November. Use 40kg seeds per hectare.' } }),
-      prisma.cropAdvice.create({ data: { expert_id: expert.expert_id, crop_id: crops[2].crop_id, title: 'Potato Disease Alert', content: 'Apply Mancozeb or Ridomil at 7-day intervals. Remove infected plants immediately.' } }),
-    ]);
+  // Crop Advice
+  await Promise.all([
+    prisma.cropAdvice.create({ data: { expert_id: expert.expert_id, crop_id: crops[0].crop_id, title: 'Boro Paddy Sowing Guide', content: 'Sow seeds in seedbed by mid-November. Use 40kg seeds per hectare.' } }),
+    prisma.cropAdvice.create({ data: { expert_id: expert.expert_id, crop_id: crops[2].crop_id, title: 'Potato Disease Alert', content: 'Apply Mancozeb or Ridomil at 7-day intervals. Remove infected plants immediately.' } }),
+  ]);
 
-    // Certificates
-    await Promise.all([
-      prisma.certificate.create({ data: { user_id: users[0].user_id, cert_type: 'TRAINING', status: 'APPROVED', approved_by: superAdmin.user_id, approved_at: new Date() } }),
-      prisma.certificate.create({ data: { user_id: users[1].user_id, cert_type: 'BIRTH', status: 'PENDING' } }),
-    ]);
+  // Certificates
+  await Promise.all([
+    prisma.certificate.create({ data: { user_id: users[0].user_id, cert_type: 'TRAINING', status: 'APPROVED', approved_by: admin.user_id, approved_at: new Date() } }),
+    prisma.certificate.create({ data: { user_id: users[1].user_id, cert_type: 'BIRTH', status: 'PENDING' } }),
+  ]);
 
-    // Polls & Votes
-    await prisma.vote.deleteMany({});
-    await prisma.poll.deleteMany({});
-    const poll = await prisma.poll.create({
-      data: { question: 'Best irrigation method for Boro paddy?', options: JSON.stringify(['Flood Irrigation', 'Drip Irrigation', 'Sprinkler', 'Alternate Wetting & Drying']), is_active: true, created_by: superAdmin.user_id },
-    });
-    await prisma.vote.create({ data: { user_id: users[0].user_id, poll_id: poll.poll_id, choice: 'Alternate Wetting & Drying' } });
-    await prisma.vote.create({ data: { user_id: users[1].user_id, poll_id: poll.poll_id, choice: 'Drip Irrigation' } });
+  // Polls
+  const poll = await prisma.poll.create({
+    data: { question: 'Best irrigation method for Boro paddy?', options: JSON.stringify(['Flood Irrigation', 'Drip Irrigation', 'Sprinkler', 'Alternate Wetting & Drying']), is_active: true, created_by: admin.user_id },
+  });
 
-    // Notifications
-    await Promise.all([
-      prisma.notification.create({ data: { user_id: users[0].user_id, type: 'IN_APP', title: 'Welcome to PolliBondhu', message: 'Your account has been created successfully.' } }),
-      prisma.notification.create({ data: { user_id: provider.user_id, type: 'IN_APP', title: 'Service Approved', message: 'Your Power Tiller Rental service is now live.' } }),
-    ]);
+  // Votes
+  await prisma.vote.create({ data: { user_id: users[0].user_id, poll_id: poll.poll_id, choice: 'Alternate Wetting & Drying' } });
+  await prisma.vote.create({ data: { user_id: users[1].user_id, poll_id: poll.poll_id, choice: 'Drip Irrigation' } });
 
-    // Audit Logs
-    await Promise.all([
-      prisma.auditLog.create({ data: { admin_id: superAdmin.user_id, action: 'USER_CREATED', entity_type: 'USER', entity_id: users[0].user_id, details: JSON.stringify({ email: users[0].email }) } }),
-      prisma.auditLog.create({ data: { admin_id: superAdmin.user_id, action: 'SERVICE_APPROVED', entity_type: 'SERVICE', entity_id: services[0].service_id, details: JSON.stringify({ title: services[0].title }) } }),
-    ]);
-  } catch (e) {
-    console.log('Skipped duplicate seed records.');
-  }
+  // Notifications
+  await Promise.all([
+    prisma.notification.create({ data: { user_id: users[0].user_id, type: 'IN_APP', title: 'Welcome to PolliBondhu', message: 'Your account has been created successfully.' } }),
+    prisma.notification.create({ data: { user_id: provider.user_id, type: 'IN_APP', title: 'Service Approved', message: 'Your Power Tiller Rental service is now live.' } }),
+  ]);
+
+  // Audit Logs
+  await Promise.all([
+    prisma.auditLog.create({ data: { admin_id: admin.user_id, action: 'USER_CREATED', entity_type: 'USER', entity_id: users[0].user_id, details: JSON.stringify({ email: users[0].email }) } }),
+    prisma.auditLog.create({ data: { admin_id: admin.user_id, action: 'SERVICE_APPROVED', entity_type: 'SERVICE', entity_id: services[0].service_id, details: JSON.stringify({ title: services[0].title }) } }),
+  ]);
 
   console.log('✅ Seed completed successfully!');
   console.log('   --- RBAC ---');
@@ -461,7 +459,7 @@ async function main() {
   console.log(`   Departments: ${deptNames.join(', ')}`);
   console.log('   --- Users ---');
   console.log(`   Super Admin: ${superAdmin.email} / admin123`);
-  console.log(`   Admin: ${superAdmin.email} / admin123`);
+  console.log(`   Admin: ${admin.email} / admin123`);
   console.log(`   Officer: ${officer.email} / officer123`);
   console.log(`   Provider: ${provider.email} / provider123`);
   console.log(`   Citizens: ${citizens.map(u => u.email + ' / user123').join(', ')}`);

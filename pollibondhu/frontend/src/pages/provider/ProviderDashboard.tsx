@@ -4,7 +4,7 @@ import { Card, CardContent } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { Wrench, Plus, Eye, Clock, TrendingUp, ArrowRight, Building2, FileText, Users, Bell } from 'lucide-react';
+import { Wrench, Plus, Eye, Clock, TrendingUp, ArrowRight, Building2, FileText, Users } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import api from '@/utils/api';
 
@@ -34,7 +34,6 @@ export default function ProviderDashboard() {
   const { user, hasRole } = useAuth();
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
-  const [pendingApps, setPendingApps] = useState(0);
 
   const isGovProvider = hasRole('GOV_SERVICE_PROVIDER');
 
@@ -46,10 +45,6 @@ export default function ProviderDashboard() {
       })
       .catch(() => setServices([]))
       .finally(() => setLoading(false));
-    // Count pending apps for badge
-    api.get('/applications', { params: { status: 'SUBMITTED', limit: '1' } })
-      .then(res => setPendingApps(res.data.data?.total || 0))
-      .catch(() => {});
   }, [user?.user_id]);
 
   const stats = {
@@ -87,26 +82,8 @@ export default function ProviderDashboard() {
           { label: 'Total Services', value: stats.total, icon: Wrench, color: 'bg-purple-50 text-purple-600' },
           { label: 'Approved & Live', value: stats.approved, icon: Eye, color: 'bg-green-50 text-green-600' },
           { label: 'Pending Review', value: stats.pending, icon: Clock, color: 'bg-amber-50 text-amber-600' },
-          { label: 'New Applications', value: pendingApps, icon: FileText, color: 'bg-blue-50 text-blue-600', link: '/provider/applications' },
+          { label: 'Active Rate', value: stats.approved > 0 ? `${Math.round((stats.approved / stats.total) * 100)}%` : '—', icon: TrendingUp, color: 'bg-blue-50 text-blue-600' },
         ].map((s) => (
-          s.link ? (
-            <Link key={s.label} to={s.link}>
-              <Card className="hover:shadow-md transition-shadow cursor-pointer">
-                <CardContent className="p-5 flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-earth-500 font-medium">{s.label}</p>
-                    <p className="text-2xl font-bold text-earth-900 mt-1">{s.value}</p>
-                  </div>
-                  <div className={`p-3 rounded-xl ${s.color} relative`}>
-                    <s.icon size={20} />
-                    {(s.value as number) > 0 && (
-                      <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-500 rounded-full text-[10px] text-white flex items-center justify-center font-bold">{s.value}</span>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            </Link>
-          ) : (
           <Card key={s.label} className="hover:shadow-md transition-shadow">
             <CardContent className="p-5 flex items-center justify-between">
               <div>
@@ -118,7 +95,6 @@ export default function ProviderDashboard() {
               </div>
             </CardContent>
           </Card>
-          )
         ))}
       </div>
 
@@ -147,30 +123,28 @@ export default function ProviderDashboard() {
 
       {/* Quick Actions */}
       <div className="grid md:grid-cols-2 gap-4">
-        <Card className="hover:shadow-md transition-shadow border-blue-200 bg-blue-50/30">
+        <Card className="hover:shadow-md transition-shadow">
           <CardContent className="p-5">
-            <h3 className="font-semibold text-earth-800 mb-2">📨 Manage Applications</h3>
+            <h3 className="font-semibold text-earth-800 mb-2">📋 {isGovProvider ? 'Add Government Service' : 'Create a New Service'}</h3>
             <p className="text-sm text-earth-500 mb-4">
-              Review, approve, or reject citizen service applications submitted through the portal.
+              {isGovProvider ? 'List a new government service so citizens can find and apply for it.' : 'List your services so citizens can find and request them.'}
             </p>
-            <Link to="/provider/applications">
-              <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
-                <FileText size={14} /> View Applications
-                {pendingApps > 0 && <span className="ml-1 bg-white text-blue-600 text-[10px] font-bold px-1.5 rounded-full">{pendingApps} new</span>}
-                <ArrowRight size={14} />
+            <Link to="/provider/services">
+              <Button size="sm">
+                <Plus size={14} /> Create Service <ArrowRight size={14} />
               </Button>
             </Link>
           </CardContent>
         </Card>
         <Card className="hover:shadow-md transition-shadow">
           <CardContent className="p-5">
-            <h3 className="font-semibold text-earth-800 mb-2">🗣️ Complaints &amp; Issues</h3>
+            <h3 className="font-semibold text-earth-800 mb-2">📨 {isGovProvider ? 'Review Applications' : 'Village Market'}</h3>
             <p className="text-sm text-earth-500 mb-4">
-              Respond to and resolve all citizen complaints and issues submitted to this office.
+              {isGovProvider ? 'Review and process citizen applications for government services.' : 'Sell crops, equipment, or anything directly to your community.'}
             </p>
-            <Link to="/provider/complaints">
+            <Link to={isGovProvider ? '/provider/services' : '/village-market'}>
               <Button size="sm" variant="outline">
-                View Complaints <ArrowRight size={14} />
+                {isGovProvider ? 'View Applications' : 'Browse Market'} <ArrowRight size={14} />
               </Button>
             </Link>
           </CardContent>

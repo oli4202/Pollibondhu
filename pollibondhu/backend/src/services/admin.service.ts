@@ -22,14 +22,6 @@ export class AdminService {
     return this.dashboardFacade.getDashboardStats();
   }
 
-  async getSubAdminDashboardStats(adminId: number) {
-    return this.dashboardFacade.getSubAdminDashboardStats(adminId);
-  }
-
-  async getOfficerDashboardStats(officerId: number) {
-    return this.dashboardFacade.getOfficerDashboardStats(officerId);
-  }
-
   async getWeeklyStats() {
     return this.dashboardFacade.getWeeklyStats();
   }

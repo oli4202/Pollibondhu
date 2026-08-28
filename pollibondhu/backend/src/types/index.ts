@@ -31,6 +31,7 @@ export interface TokenPayload {
 /** All system roles */
 export type SystemRole =
   | 'ADMIN'              // Full system administrator
+  | 'OFFICER'            // Government officer
   | 'SERVICE_PROVIDER'   // Service provider
   | 'GOV_SERVICE_PROVIDER' // Government service provider
   | 'NGO_ADMIN'          // NGO administrator

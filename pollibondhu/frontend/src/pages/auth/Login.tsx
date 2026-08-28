@@ -32,7 +32,7 @@ export default function Login() {
           const roles = loggedInUser?.roles || [];
           const role = loggedInUser?.role;
           const allRoles = [...new Set([...roles, role].filter(Boolean))];
-          if (allRoles.includes('SUPER_ADMIN') || allRoles.includes('ADMIN') || allRoles.includes('OFFICER')) {
+          if (allRoles.includes('ADMIN') || allRoles.includes('OFFICER')) {
             navigate('/admin');
           } else if (allRoles.some(r => ['PROVIDER', 'SERVICE_PROVIDER', 'GOV_SERVICE_PROVIDER'].includes(r))) {
             navigate('/provider');
@@ -143,7 +143,7 @@ export default function Login() {
             </p>
             <div className="mt-4 p-3 bg-earth-50 rounded-lg text-xs text-earth-500">
               <p className="font-medium mb-1">Demo accounts:</p>
-              <p>Admin: superadmin@pollibondhu.test / admin123</p>
+              <p>Admin: admin@pollibondhu.test / admin123</p>
               <p>User: rahim@pollibondhu.test / user123</p>
             </div>
           </CardContent>

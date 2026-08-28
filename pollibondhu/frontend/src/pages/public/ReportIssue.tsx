@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, Sparkles, MapPin, Loader2 } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Sparkles, MapPin } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import api from '@/utils/api';
@@ -69,20 +69,6 @@ export default function ReportIssue() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showAi, setShowAi] = useState(false);
-  const [generatingAi, setGeneratingAi] = useState(false);
-
-  const handleAutoFill = () => {
-    const randomCategory = issueCategories[Math.floor(Math.random() * issueCategories.length)].value;
-    setIssueType(randomCategory);
-    
-    if (aiDescriptions[randomCategory] && aiDescriptions[randomCategory].length > 0) {
-      setDescription(aiDescriptions[randomCategory][0]);
-    } else {
-      setDescription('Demo description of the issue that needs to be addressed urgently.');
-    }
-    
-    setLocation(locationSuggestions[Math.floor(Math.random() * locationSuggestions.length)]);
-  };
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -101,32 +87,6 @@ export default function ReportIssue() {
       setLoading(false);
     }
   }
-
-  const handleAiCorrect = async () => {
-    if (!description.trim()) return;
-    setGeneratingAi(true);
-    try {
-      const res = await api.post('/ai/correct', { text: description, language: 'English' });
-      if (res.data.corrected) setDescription(res.data.corrected);
-    } catch (err) {
-      alert('Failed to correct text');
-    } finally {
-      setGeneratingAi(false);
-    }
-  };
-
-  const handleAiImprove = async () => {
-    if (!description.trim()) return;
-    setGeneratingAi(true);
-    try {
-      const res = await api.post('/ai/improve', { text: description, type: 'complaint' });
-      if (res.data.improved) setDescription(res.data.improved);
-    } catch (err) {
-      alert('Failed to improve text');
-    } finally {
-      setGeneratingAi(false);
-    }
-  };
 
   return (
     <div className="max-w-3xl mx-auto px-6 py-12">
@@ -169,16 +129,7 @@ export default function ReportIssue() {
 
           {/* Category Grid Dropdown */}
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-earth-700">Issue Type *</label>
-              <button 
-                type="button" 
-                onClick={handleAutoFill}
-                className="text-xs px-3 py-1 bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100 rounded-lg font-medium transition flex items-center gap-1 shadow-sm"
-              >
-                <Sparkles size={12} /> Auto-Fill Demo
-              </button>
-            </div>
+            <label className="block text-sm font-medium text-earth-700 mb-2">Issue Type *</label>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
               {issueCategories.map(c => (
                 <button key={c.value} type="button" onClick={() => setIssueType(c.value)}
@@ -195,27 +146,14 @@ export default function ReportIssue() {
           {/* Description with AI */}
           <div>
             <label className="block text-sm font-medium text-earth-700 mb-1">Description *</label>
-            <div className="relative">
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                required
-                rows={5}
-                placeholder="Describe the issue in detail..."
-                className="w-full border border-earth-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-polli-500"
-              />
-              {/* Floating AI Action Buttons */}
-              {description.trim() && (
-                <div className="absolute top-2 right-2 flex flex-col gap-1 z-20">
-                  <button onClick={handleAiCorrect} type="button" disabled={generatingAi} className="flex items-center justify-center gap-1 text-[10px] font-bold text-polli-600 bg-polli-50 hover:bg-polli-100 px-2 py-1 rounded transition-colors shadow-sm disabled:opacity-50 border border-polli-200">
-                    {generatingAi ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />} Correct
-                  </button>
-                  <button onClick={handleAiImprove} type="button" disabled={generatingAi} className="flex items-center justify-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded transition-colors shadow-sm disabled:opacity-50 border border-emerald-200">
-                    {generatingAi ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />} Improve
-                  </button>
-                </div>
-              )}
-            </div>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              required
+              rows={5}
+              placeholder="Describe the issue in detail..."
+              className="w-full border border-earth-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-polli-500"
+            />
             {issueType && aiDescriptions[issueType] && (
               <div className="mt-2">
                 <button type="button" onClick={() => setShowAi(!showAi)}
