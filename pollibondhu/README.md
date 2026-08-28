@@ -134,39 +134,49 @@ graph TD
     Repo -->|Prisma ORM| DB[(Database - PostgreSQL/SQLite)]
 ```
 
-### 3. Architecture Decision (ADS)
+### 3. Architecture Decision (ADS) & Technology Stack Deep-Dive
+
 The Architectural Decision System reflects the core technology choices made for this platform, prioritizing speed, accessibility, and type safety.
 
+#### ⚙️ In-Depth Stack Description
+1. **Frontend Layer (React 18 & Vite):** We chose React for its Virtual DOM speed and component reusability, essential for building complex dashboards. Vite was selected over Webpack/CRA for its lightning-fast Hot Module Replacement (HMR). TailwindCSS ensures a highly responsive, glassmorphic UI without the bloat of traditional CSS files.
+2. **Backend API Layer (Node.js & Express):** Node's asynchronous, non-blocking I/O model perfectly handles the massive concurrent connections required by our Socket.io chat and real-time notification systems. TypeScript strictly types the entire layer to prevent runtime errors.
+3. **Data Access Layer (Prisma ORM):** Prisma provides an auto-generated, type-safe query builder that bridges the gap between our TypeScript backend and the relational database. It entirely eliminates SQL injection risks and drastically speeds up development.
+4. **Database Layer (SQLite / PostgreSQL):** A relational SQL database is strictly required due to the highly relational nature of our data (e.g., Users -> Roles -> Departments -> Complaints).
+5. **Real-Time Layer (Socket.io):** Handles persistent TCP WebSocket connections for real-time live chat and instantaneous application status updates without HTTP polling.
+
+#### 🔄 In-Depth Stack Data Flow Diagram
+This diagram illustrates exactly how data travels through the full stack—from a user click down to the database row and back via WebSockets.
+
 ```mermaid
-mindmap
-  root((PolliBondhu ADS))
-    Frontend
-      React 18
-        Component Reusability
-        Virtual DOM Speed
-      TailwindCSS
-        Rapid Prototyping
-        Consistent Design System
-      Vite
-        Fast HMR
-        Optimized Build
-    Backend
-      Node.js & Express
-        Non-blocking I/O
-        Extensive Ecosystem
-      TypeScript
-        Type Safety
-        Developer Experience
-    Database
-      Prisma ORM
-        Schema Migrations
-        Type-Safe Queries
-      SQLite / PostgreSQL
-        Relational Integrity
-    Real-Time
-      Socket.io
-        Event-driven notifications
-        Live chat rooms
+sequenceDiagram
+    participant User as Citizen UI (React)
+    participant Auth as Auth Context (React)
+    participant Net as Axios / HTTP
+    participant Exp as Express Router
+    participant Mid as RBAC Middleware
+    participant Svc as Business Logic Service
+    participant ORM as Prisma ORM
+    participant DB as SQL Database
+    participant WS as Socket.io Server
+
+    Note over User,DB: Full-Stack Request/Response Cycle
+    User->>Auth: 1. Action Triggered (e.g. File Complaint)
+    Auth->>Net: 2. Attach JWT Token
+    Net->>Exp: 3. POST /api/complaints
+    Exp->>Mid: 4. requirePermission('CREATE_COMPLAINT')
+    Mid->>Svc: 5. Permission Granted
+    Svc->>ORM: 6. prisma.complaint.create()
+    ORM->>DB: 7. SQL INSERT
+    DB-->>ORM: 8. Return created row
+    ORM-->>Svc: 9. Map to TS Object
+    Svc-->>Exp: 10. HTTP 201 Created
+    Exp-->>Net: 11. Send JSON
+    Net-->>User: 12. Update React State
+    
+    Note over Svc,WS: Parallel Real-Time Flow
+    Svc-)WS: 13. Trigger Observer Event
+    WS-)User: 14. Emit 'notification' (Push to UI)
 ```
 
 ### 4. App Flow Diagram
