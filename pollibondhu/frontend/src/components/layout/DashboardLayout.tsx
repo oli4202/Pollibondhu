@@ -19,10 +19,12 @@ const sidebarItems = [
 
 const providerSidebarItems = [
   { to: '/provider', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/provider/applications', label: 'Applications', icon: FolderOpen },
   { to: '/provider/services', label: 'My Services', icon: Wrench },
   { to: '/provider/messages', label: 'Messages', icon: MessageSquare },
   { to: '/provider/complaints', label: 'Complaints', icon: AlertTriangle },
   { to: '/village-market', label: 'Village Market', icon: Store },
+  { to: '/provider/profile', label: 'Profile', icon: User },
 ];
 
 const mobileNavItems = [
@@ -35,10 +37,10 @@ const mobileNavItems = [
 
 const providerMobileNavItems = [
   { to: '/provider', label: 'Home', icon: LayoutDashboard },
+  { to: '/provider/applications', label: 'Applications', icon: FolderOpen },
   { to: '/provider/services', label: 'Services', icon: Wrench },
   { to: '/provider/complaints', label: 'Issues', icon: AlertTriangle },
-  { to: '/provider/messages', label: 'Messages', icon: MessageSquare },
-  { to: '/dashboard/profile', label: 'Profile', icon: User },
+  { to: '/provider/profile', label: 'Profile', icon: User },
 ];
 
 export default function DashboardLayout() {

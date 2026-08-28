@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Breadcrumb } from '@/components/ui/Breadcrumb';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -7,7 +8,7 @@ import {
   MessageSquare, Send, Users, Plus, Search, Phone, Video, MoreVertical,
   Mic, MicOff, Image, Paperclip, Smile, X, ChevronDown, ChevronLeft,
   Bot, Radio, AlertTriangle, Building2, Shield, Heart, Wrench, FileText,
-  Play, Pause, Square, Check, CheckCheck, UserPlus, Sparkles, Loader2, Download, FileIcon, Eye
+  Play, Pause, Square, Check, CheckCheck, UserPlus, Sparkles, Loader2, Download, FileIcon, Eye, Pencil, Trash2, CornerUpLeft
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/components/feedback/ToastProvider';
@@ -81,7 +82,18 @@ interface ProviderComplaint {
   provider: { full_name: string };
   service?: { title: string };
   created_at: string;
+  conversation_id?: number;
 }
+
+// ============================================
+// HELPERS
+// ============================================
+const getFileUrl = (url: string | undefined) => {
+  if (!url) return '';
+  if (url.startsWith('http')) return url;
+  const baseUrl = api.defaults.baseURL?.replace('/api', '') || 'http://localhost:4000';
+  return `${baseUrl}${url}`;
+};
 
 // ============================================
 // COMPLAINT SUGGESTIONS DATA
@@ -165,6 +177,8 @@ export default function MyMessages() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const location = useLocation();
+  const navigate = useNavigate();
 
   // State
   const [activeTab, setActiveTab] = useState<'chats' | 'channels' | 'complaints'>('chats');
@@ -175,6 +189,12 @@ export default function MyMessages() {
   const [channelPosts, setChannelPosts] = useState<ChannelPost[]>([]);
   const [complaints, setComplaints] = useState<ProviderComplaint[]>([]);
   const [input, setInput] = useState('');
+  const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
+  const [channelInput, setChannelInput] = useState('');
+  const [generatingChannelAi, setGeneratingChannelAi] = useState(false);
+  const [suggestedReplies, setSuggestedReplies] = useState<string[]>([]);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [replyingToMessage, setReplyingToMessage] = useState<ChatMessage | null>(null);
   const [loading, setLoading] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
   const [typingUsers, setTypingUsers] = useState<Set<number>>(new Set());
@@ -192,6 +212,7 @@ export default function MyMessages() {
   const [complaintFile, setComplaintFile] = useState<File | null>(null);
   const [complaintFileUploading, setComplaintFileUploading] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
+  const [generatingAiChat, setGeneratingAiChat] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
@@ -235,6 +256,14 @@ export default function MyMessages() {
       ));
     });
 
+    socket.on('chat:edit', (editedMsg: ChatMessage) => {
+      setMessages(prev => prev.map(m => m.message_id === editedMsg.message_id ? editedMsg : m));
+    });
+
+    socket.on('chat:delete', (deletedMsg: ChatMessage) => {
+      setMessages(prev => prev.map(m => m.message_id === deletedMsg.message_id ? deletedMsg : m));
+    });
+
     socket.on('chat:typing', (data: { userId: number; conversationId: number; isTyping: boolean }) => {
       if (data.conversationId === selectedConvoRef.current?.conversation_id) {
         setTypingUsers(prev => {
@@ -247,6 +276,11 @@ export default function MyMessages() {
 
     socket.on('channel:post', (post: ChannelPost) => {
       setChannelPosts(prev => [post, ...prev]);
+    });
+
+    socket.on('complaint:update', (updatedComplaint: ProviderComplaint) => {
+      setComplaints(prev => prev.map(c => c.complaint_id === updatedComplaint.complaint_id ? updatedComplaint : c));
+      addToast(`Provider responded to your complaint: ${updatedComplaint.subject}`, 'success');
     });
 
     socket.on('channel:comment', (data: any) => {
@@ -315,6 +349,23 @@ export default function MyMessages() {
     } catch {}
   }, []);
 
+  useEffect(() => {
+    api.get('/users').then(res => setAllUsers(res.data.data)).catch(() => undefined);
+  }, []);
+
+  // Handle incoming conversationId from routing state (e.g. from ProviderComplaints)
+  useEffect(() => {
+    if (location.state?.conversationId && conversations.length > 0 && !selectedConvo) {
+      const convo = conversations.find(c => c.conversation_id === location.state.conversationId);
+      if (convo) {
+        setSelectedConvo(convo);
+        setActiveTab('chats');
+        // Clear state to prevent re-triggering
+        navigate(location.pathname, { replace: true, state: {} });
+      }
+    }
+  }, [location.state, conversations, selectedConvo, navigate, location.pathname]);
+
   const fetchComplaints = useCallback(async () => {
     try {
       const res = await api.get('/chat/complaints');
@@ -365,11 +416,23 @@ export default function MyMessages() {
   // ============================================
   function sendMessage() {
     if (!input.trim() || !selectedConvo || !user) return;
+    
+    if (editingMessageId) {
+      // Handle Edit
+      api.put(`/chat/messages/${editingMessageId}`, { content: input }).then(res => {
+        setMessages(prev => prev.map(m => m.message_id === editingMessageId ? res.data.data : m));
+        setEditingMessageId(null);
+        setInput('');
+      }).catch(() => alert('Failed to edit message'));
+      return;
+    }
+
     const msg = {
       conversationId: selectedConvo.conversation_id,
       senderId: user.user_id,
       content: input,
       messageType: 'TEXT',
+      replyToId: replyingToMessage?.message_id,
     };
     socketRef.current?.emit('chat:message', msg);
 
@@ -379,11 +442,79 @@ export default function MyMessages() {
       conversation_id: selectedConvo.conversation_id,
       content: input,
       message_type: 'TEXT',
-      sender: { user_id: user.user_id, full_name: user.full_name, role: user.role },
+      sender: { user_id: user.user_id, full_name: user.full_name, role: user.role, avatar_url: user.avatar_url },
       created_at: new Date().toISOString(),
+      reply_to: replyingToMessage ? { message_id: replyingToMessage.message_id, content: replyingToMessage.content, sender: { full_name: replyingToMessage.sender.full_name } } : undefined
     }]);
     setInput('');
+    setReplyingToMessage(null);
+    setShowEmojiPicker(false);
     setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+  }
+
+  async function handleDeleteMessage(messageId: number) {
+    if (!confirm('Are you sure you want to delete this message?')) return;
+    try {
+      const res = await api.delete(`/chat/messages/${messageId}`);
+      setMessages(prev => prev.map(m => m.message_id === messageId ? res.data.data : m));
+    } catch {
+      alert('Failed to delete message');
+    }
+  }
+
+  function handleEditInit(msg: ChatMessage) {
+    setEditingMessageId(msg.message_id);
+    setInput(msg.content || '');
+  }
+
+  async function createChannelPost() {
+    if (!channelInput.trim() || !selectedConvo || !user) return;
+    try {
+      const res = await api.post(`/chat/conversations/${selectedConvo.conversation_id}/posts`, {
+        content: channelInput,
+        post_type: 'UPDATE',
+      });
+      setChannelPosts([res.data.data, ...channelPosts]); // posts are ordered desc
+      setChannelInput('');
+    } catch (err) {
+      alert('Failed to post to channel');
+    }
+  }
+
+  async function handleAiMagicBroadcast() {
+    setGeneratingChannelAi(true);
+    try {
+      const res = await api.post('/ai/complaint-response', { 
+        subject: 'Channel Broadcast', 
+        description: channelInput || 'Write a professional general update for citizens in my channel.' 
+      });
+      if (res.data.response) setChannelInput(res.data.response);
+    } catch {
+      alert('Failed to generate magic broadcast');
+    } finally {
+      setGeneratingChannelAi(false);
+    }
+  }
+
+  async function handleAiSuggestReply() {
+    const lastOtherMsg = [...messages].reverse().find(m => m.sender.user_id !== user?.user_id && m.message_type === 'TEXT');
+    if (!lastOtherMsg) {
+      addToast('No recent text message to reply to.', 'info');
+      return;
+    }
+    
+    setGeneratingAiChat(true);
+    try {
+      const res = await api.post('/ai/suggest-reply', {
+        receivedMessage: lastOtherMsg.content,
+        context: `Chat with ${lastOtherMsg.sender.full_name}`
+      });
+      if (res.data.suggestions) setSuggestedReplies(res.data.suggestions);
+    } catch {
+      alert('Failed to generate suggestions');
+    } finally {
+      setGeneratingAiChat(false);
+    }
   }
 
   // ============================================
@@ -397,25 +528,44 @@ export default function MyMessages() {
       audioChunksRef.current = [];
 
       recorder.ondataavailable = (e) => audioChunksRef.current.push(e.data);
-      recorder.onstop = () => {
+      recorder.onstop = async () => {
         const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        const url = URL.createObjectURL(blob);
-        // In production: upload to server, then send message
+        
         if (selectedConvo && user) {
-          socketRef.current?.emit('chat:voice_complete', {
-            conversationId: selectedConvo.conversation_id,
-            senderId: user.user_id,
-            mediaUrl: url,
-            duration: 0,
-          });
-          setMessages(prev => [...prev, {
-            message_id: Date.now(),
-            conversation_id: selectedConvo.conversation_id,
-            message_type: 'VOICE',
-            media_url: url,
-            sender: { user_id: user.user_id, full_name: user.full_name, role: user.role },
-            created_at: new Date().toISOString(),
-          }]);
+          try {
+            // Upload the audio blob as a file
+            const formData = new FormData();
+            formData.append('file', blob, 'voice_message.webm');
+            
+            const res = await api.post(`/chat/conversations/${selectedConvo.conversation_id}/upload`, formData, {
+              headers: { 'Content-Type': 'multipart/form-data' },
+            });
+            
+            const { file_url } = res.data.data;
+
+            // Emit the voice message via socket with the real server URL
+            socketRef.current?.emit('chat:voice_complete', {
+              conversationId: selectedConvo.conversation_id,
+              senderId: user.user_id,
+              mediaUrl: file_url,
+              duration: 0,
+            });
+
+            // Optimistic update
+            setMessages(prev => [...prev, {
+              message_id: Date.now(),
+              conversation_id: selectedConvo.conversation_id,
+              message_type: 'VOICE',
+              media_url: file_url,
+              sender: { user_id: user.user_id, full_name: user.full_name, role: user.role },
+              created_at: new Date().toISOString(),
+            }]);
+            
+            setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+          } catch (error) {
+            console.error('Failed to upload voice message', error);
+            addToast('Failed to send voice message', 'error');
+          }
         }
         stream.getTracks().forEach(t => t.stop());
       };
@@ -566,6 +716,37 @@ Respond in JSON format ONLY:
       setAiLoading(false);
     }
   }
+
+  // ============================================
+  // AI CHAT ASSISTANCE
+  // ============================================
+  const handleAiCorrectChat = async () => {
+    if (!input.trim()) return;
+    setGeneratingAiChat(true);
+    try {
+      const res = await api.post('/ai/correct', { text: input, language: 'English' });
+      if (res.data.corrected) setInput(res.data.corrected);
+      addToast('Grammar corrected!', 'success');
+    } catch (err) {
+      addToast('Failed to correct text', 'error');
+    } finally {
+      setGeneratingAiChat(false);
+    }
+  };
+
+  const handleAiImproveChat = async () => {
+    if (!input.trim()) return;
+    setGeneratingAiChat(true);
+    try {
+      const res = await api.post('/ai/improve', { text: input, type: 'complaint' });
+      if (res.data.improved) setInput(res.data.improved);
+      addToast('Text improved!', 'success');
+    } catch (err) {
+      addToast('Failed to improve text', 'error');
+    } finally {
+      setGeneratingAiChat(false);
+    }
+  };
 
   // ============================================
   // FILE COMPLAINT
@@ -766,10 +947,25 @@ Respond in JSON format ONLY:
                   No complaints filed
                 </div>
               ) : complaints.map(c => (
-                <div key={c.complaint_id} className="px-4 py-3 border-b border-earth-50">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold">{c.subject}</span>
-                    <Badge variant={c.status === 'RESOLVED' ? 'success' : c.status === 'OPEN' ? 'warning' : 'info'} className="text-[9px]">{c.status}</Badge>
+                <div key={c.complaint_id} 
+                  onClick={() => {
+                    if (c.conversation_id) {
+                      const convo = conversations.find(conv => conv.conversation_id === c.conversation_id);
+                      if (convo) {
+                        setSelectedConvo(convo);
+                        setActiveTab('chats');
+                      } else {
+                        addToast('Chat not found for this complaint', 'error');
+                      }
+                    }
+                  }}
+                  className="px-4 py-3 border-b border-earth-50 hover:bg-earth-50 cursor-pointer transition">
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold">{c.subject}</span>
+                      <Badge variant={c.status === 'RESOLVED' ? 'success' : c.status === 'OPEN' ? 'warning' : 'info'} className="text-[9px]">{c.status}</Badge>
+                    </div>
+                    {c.conversation_id && <MessageSquare size={14} className="text-polli-500" />}
                   </div>
                   <p className="text-xs text-earth-400 mt-0.5">To: {c.provider.full_name} · {c.category}</p>
                 </div>
@@ -845,9 +1041,9 @@ Respond in JSON format ONLY:
                     {post.media_url && (
                       <div className="mt-3 rounded-lg overflow-hidden bg-earth-100">
                         {post.media_type === 'video' ? (
-                          <video src={post.media_url} controls className="w-full max-h-64" />
+                          <video src={getFileUrl(post.media_url)} controls className="w-full max-h-64" />
                         ) : (
-                          <img src={post.media_url} alt="" className="w-full max-h-64 object-cover" />
+                          <img src={getFileUrl(post.media_url)} alt="" className="w-full max-h-64 object-cover" />
                         )}
                       </div>
                     )}
@@ -870,6 +1066,32 @@ Respond in JSON format ONLY:
               ))}
               <div ref={messagesEndRef} />
             </div>
+
+            {selectedConvo.my_role === 'OWNER' && (
+              <div className="p-4 border-t border-earth-200 bg-white">
+                <div className="flex gap-2">
+                  <div className="flex-1 relative">
+                    <textarea 
+                      value={channelInput}
+                      onChange={(e) => setChannelInput(e.target.value)}
+                      placeholder="Write an update for your channel followers..."
+                      rows={2}
+                      className="w-full bg-earth-50 border-transparent focus:border-polli-500 focus:ring-2 focus:ring-polli-200 rounded-xl px-4 py-2 text-sm resize-none"
+                    />
+                    <button 
+                      onClick={handleAiMagicBroadcast}
+                      disabled={generatingChannelAi}
+                      className="absolute bottom-2 right-2 flex items-center gap-1 text-[10px] font-bold text-polli-600 bg-polli-50 hover:bg-polli-100 px-2 py-1 rounded transition-colors shadow-sm disabled:opacity-50 border border-polli-200"
+                    >
+                      {generatingChannelAi ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />} Magic Fill
+                    </button>
+                  </div>
+                  <button onClick={createChannelPost} disabled={!channelInput.trim()} className="bg-polli-600 hover:bg-polli-700 text-white p-3 rounded-xl transition flex-shrink-0 disabled:opacity-50 self-end">
+                    <Send size={20} />
+                  </button>
+                </div>
+              </div>
+            )}
           </>
         ) : (
           /* ============================================ */
@@ -897,140 +1119,257 @@ Respond in JSON format ONLY:
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-earth-50/30">
+            <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-earth-50/50">
               {messages.length === 0 && (
-                <div className="text-center text-earth-400 py-12">
-                  <MessageSquare size={40} className="mx-auto mb-3 text-earth-300" />
-                  <p className="text-sm">Start the conversation</p>
+                <div className="text-center text-earth-400 py-16 animate-in fade-in zoom-in duration-500">
+                  <div className="h-20 w-20 bg-earth-100 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
+                    <MessageSquare size={40} className="text-earth-400" />
+                  </div>
+                  <p className="text-sm font-medium">Say hello to start the conversation!</p>
                 </div>
               )}
-              {messages.map(msg => {
+              {messages.map((msg, idx) => {
                 const isMine = msg.sender.user_id === user?.user_id;
+                // Add a small gap between messages of different users, or tight gap for same user
+                const prevMsg = messages[idx - 1];
+                const isFirstInGroup = !prevMsg || prevMsg.sender.user_id !== msg.sender.user_id;
+
                 return (
-                  <div key={msg.message_id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[70%] ${isMine ? 'order-2' : ''}`}>
-                      {selectedConvo.type === 'GROUP' && !isMine && (
-                        <p className="text-[10px] font-semibold text-polli-600 mb-1 ml-1">{msg.sender.full_name}</p>
+                  <div key={msg.message_id} className={`flex ${isMine ? 'justify-end' : 'justify-start'} ${isFirstInGroup ? 'mt-6' : 'mt-1'}`}>
+                    <div className={`max-w-[75%] animate-in fade-in slide-in-from-bottom-2 duration-300 ${isMine ? 'order-2' : ''}`}>
+                      {selectedConvo.type === 'GROUP' && !isMine && isFirstInGroup && (
+                        <p className="text-[10px] font-bold text-polli-600 mb-1 ml-3 tracking-wide">{msg.sender.full_name}</p>
                       )}
-                      <div className={`rounded-2xl px-4 py-2.5 ${
+                      <div className={`px-4 py-2.5 shadow-sm relative group ${
                         isMine
-                          ? 'bg-polli-600 text-white rounded-br-md'
-                          : 'bg-white text-earth-800 border border-earth-200 rounded-bl-md shadow-sm'
+                          ? 'bg-gradient-to-br from-polli-600 to-emerald-600 text-white rounded-3xl rounded-tr-sm'
+                          : 'bg-white text-earth-800 border border-earth-100 rounded-3xl rounded-tl-sm'
                       }`}>
+                        
+                        {/* Render Reply Context if any */}
+                        {msg.reply_to && (
+                          <div className={`text-[10px] p-1.5 rounded-lg mb-1 border-l-2 ${isMine ? 'bg-black/10 border-white/50 text-white/90' : 'bg-earth-50 border-polli-500 text-earth-600'}`}>
+                            <span className="font-bold">{msg.reply_to.sender?.full_name}:</span> {msg.reply_to.content}
+                          </div>
+                        )}
+
+                        {/* Actions Overlay */}
+                        <div className={`absolute top-1/2 -translate-y-1/2 ${isMine ? '-left-20' : '-right-8'} flex items-center gap-1 bg-white shadow-sm border border-earth-200 rounded-full px-1.5 py-1 z-10 opacity-20 group-hover:opacity-100 focus-within:opacity-100 transition-opacity`}>
+                          {!isMine && (
+                            <button onClick={() => setReplyingToMessage(msg)} className="p-1 hover:bg-earth-100 rounded-full text-earth-500 hover:text-polli-600 transition" title="Reply">
+                              <CornerUpLeft size={12} />
+                            </button>
+                          )}
+                          {isMine && msg.message_type === 'TEXT' && (
+                            <>
+                              <button onClick={() => handleEditInit(msg)} className="p-1 hover:bg-earth-100 rounded-full text-earth-500 hover:text-polli-600 transition" title="Edit">
+                                <Pencil size={12} />
+                              </button>
+                              <button onClick={() => handleDeleteMessage(msg.message_id)} className="p-1 hover:bg-earth-100 rounded-full text-earth-500 hover:text-red-600 transition" title="Delete">
+                                <Trash2 size={12} />
+                              </button>
+                            </>
+                          )}
+                        </div>
+
                         {msg.message_type === 'VOICE' ? (
-                          <div className="flex items-center gap-2">
-                            <button className="p-1"><Play size={14} /></button>
-                            <div className="flex-1 h-6 bg-earth-200 rounded-full overflow-hidden">
-                              <div className="h-full w-1/3 bg-polli-400 rounded-full" />
-                            </div>
-                            <span className="text-[10px]">{msg.media_duration ? `${msg.media_duration}s` : '0:12'}</span>
+                          <div className="flex flex-col gap-1 min-w-[200px]">
+                            <audio src={getFileUrl(msg.media_url)} controls className={`h-10 w-full ${isMine ? 'invert brightness-200 contrast-200 opacity-90' : ''}`} />
+                            {msg.content && <p className="text-sm mt-1">{msg.content}</p>}
                           </div>
                         ) : msg.message_type === 'IMAGE' ? (
-                          <div>
+                          <div className="-mx-2 -mt-1 -mb-1">
                             <img
-                              src={msg.media_url}
+                              src={getFileUrl(msg.media_url)}
                               alt={msg.content || 'Image'}
-                              className="rounded-lg max-w-full max-h-64 object-cover cursor-pointer hover:opacity-90 transition"
-                              onClick={() => msg.media_url && setImagePreview(msg.media_url)}
+                              className="rounded-2xl max-w-full sm:max-w-xs max-h-72 object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                              onClick={() => msg.media_url && setImagePreview(getFileUrl(msg.media_url))}
                             />
-                            {msg.content && <p className="text-xs mt-1 opacity-70">{msg.content}</p>}
+                            {msg.content && <p className={`text-sm mt-2 px-2 ${isMine ? 'text-white' : 'text-earth-800'}`}>{msg.content}</p>}
                           </div>
                         ) : msg.message_type === 'VIDEO' ? (
-                          <div>
+                          <div className="-mx-2 -mt-1 -mb-1">
                             <video
-                              src={msg.media_url}
+                              src={getFileUrl(msg.media_url)}
                               controls
-                              className="rounded-lg max-w-full max-h-64"
+                              className="rounded-2xl max-w-full sm:max-w-xs max-h-72 object-cover bg-black"
                             />
-                            {msg.content && <p className="text-xs mt-1 opacity-70">{msg.content}</p>}
+                            {msg.content && <p className={`text-sm mt-2 px-2 ${isMine ? 'text-white' : 'text-earth-800'}`}>{msg.content}</p>}
                           </div>
                         ) : msg.message_type === 'FILE' ? (
                           <a
-                            href={msg.media_url}
+                            href={getFileUrl(msg.media_url)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="flex items-center gap-3 p-2 rounded-lg bg-earth-50 hover:bg-earth-100 transition border border-earth-200"
+                            className={`flex items-center gap-3 p-2 rounded-xl transition ${isMine ? 'bg-black/10 hover:bg-black/20 text-white' : 'bg-earth-50 hover:bg-earth-100 text-earth-900'}`}
                           >
-                            <div className="h-10 w-10 rounded-lg bg-polli-100 text-polli-600 flex items-center justify-center shrink-0">
+                            <div className={`h-10 w-10 rounded-lg flex items-center justify-center shrink-0 ${isMine ? 'bg-white/20' : 'bg-polli-100 text-polli-600'}`}>
                               <FileIcon size={18} />
                             </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">{msg.content || 'File'}</p>
-                              <p className="text-[10px] opacity-60">Tap to open</p>
+                            <div className="flex-1 min-w-0 pr-4">
+                              <p className="text-sm font-bold truncate">{msg.content || 'Attachment'}</p>
+                              <p className={`text-[10px] ${isMine ? 'text-white/70' : 'text-earth-500'}`}>Click to open</p>
                             </div>
-                            <Download size={14} className="shrink-0 opacity-50" />
+                            <Download size={16} className={`shrink-0 ${isMine ? 'text-white/50' : 'text-earth-400'}`} />
                           </a>
                         ) : (
-                          <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                          <p className="text-[15px] whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                         )}
                       </div>
-                      <p className={`text-[10px] mt-0.5 ${isMine ? 'text-right' : 'text-left'} text-earth-400`}>
+                      <p className={`text-[10px] mt-1 px-1 ${isMine ? 'text-right' : 'text-left'} text-earth-400 font-medium`}>
                         {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         {isMine && (
                           (msg.reads && msg.reads.length > 0)
-                            ? <span title="Read"><CheckCheck size={10} className="inline ml-1 text-blue-500" /></span>
-                            : <span title="Sent"><CheckCheck size={10} className="inline ml-1 text-earth-400" /></span>
+                            ? <span title="Read"><CheckCheck size={12} className="inline ml-1 text-polli-500" /></span>
+                            : <span title="Sent"><CheckCheck size={12} className="inline ml-1 opacity-50" /></span>
                         )}
                       </p>
                     </div>
                   </div>
                 );
               })}
-              <div ref={messagesEndRef} />
+              <div ref={messagesEndRef} className="h-4" />
             </div>
 
-            {/* Input Bar */}
-            <div className="px-4 py-3 border-t border-earth-100 bg-white">
-              {/* Hidden file inputs */}
-              <input ref={imageInputRef} type="file" accept="image/*" className="hidden"
-                onChange={e => handleFileUpload(e, 'image')} />
-              <input ref={fileInputRef} type="file" accept="image/*,video/*,.pdf,.doc,.docx" className="hidden"
-                onChange={e => handleFileUpload(e, 'file')} />
-
-              {uploading && (
-                <div className="mb-2 flex items-center gap-2 text-xs text-polli-600">
-                  <Loader2 size={14} className="animate-spin" /> Uploading file...
+            {/* Input Bar (Floating Pill Style) */}
+            <div className="p-4 bg-earth-50/50">
+              
+              {/* AI Suggested Replies */}
+              {suggestedReplies.length > 0 && (
+                <div className="flex gap-2 mb-2 overflow-x-auto pb-1 no-scrollbar animate-in slide-in-from-bottom-2">
+                  {suggestedReplies.map((reply, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => { setInput(reply); setSuggestedReplies([]); }}
+                      className="whitespace-nowrap px-3 py-1.5 bg-polli-50 hover:bg-polli-100 text-polli-700 text-xs font-semibold rounded-full border border-polli-200 transition-colors shadow-sm"
+                    >
+                      {reply}
+                    </button>
+                  ))}
+                  <button onClick={() => setSuggestedReplies([])} className="p-1.5 bg-earth-100 hover:bg-earth-200 text-earth-500 rounded-full transition-colors">
+                    <X size={12} />
+                  </button>
                 </div>
               )}
 
-              <div className="flex items-center gap-2">
-                <button onClick={() => imageInputRef.current?.click()}
-                  disabled={uploading}
-                  className="p-2 rounded-lg hover:bg-earth-100 text-earth-500 disabled:opacity-50"
-                  title="Send image">
-                  <Image size={18} />
-                </button>
-                <button onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
-                  className="p-2 rounded-lg hover:bg-earth-100 text-earth-500 disabled:opacity-50"
-                  title="Send file">
-                  <Paperclip size={18} />
-                </button>
+              {/* Editing Indicator */}
+              {editingMessageId && (
+                <div className="flex items-center justify-between bg-polli-50 border border-polli-200 rounded-t-xl px-4 py-2 mb-[-10px] relative z-0">
+                  <div className="flex items-center gap-2 text-xs text-polli-700">
+                    <Pencil size={12} />
+                    <span className="font-semibold">Editing message...</span>
+                  </div>
+                  <button onClick={() => { setEditingMessageId(null); setInput(''); }} className="text-earth-400 hover:text-earth-600"><X size={14} /></button>
+                </div>
+              )}
 
-                <div className="flex-1 relative">
-                  <input value={input} onChange={e => setInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-                    onFocus={() => socketRef.current?.emit('chat:typing', { userId: user?.user_id, conversationId: selectedConvo.conversation_id, isTyping: true })}
-                    onBlur={() => socketRef.current?.emit('chat:typing', { userId: user?.user_id, conversationId: selectedConvo.conversation_id, isTyping: false })}
-                    placeholder="Type a message..."
-                    className="w-full border border-earth-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-polli-500 bg-earth-50" />
+              {/* Replying Indicator */}
+              {replyingToMessage && (
+                <div className="flex items-center justify-between bg-polli-50 border border-polli-200 rounded-t-xl px-4 py-2 mb-[-10px] relative z-0">
+                  <div className="flex items-center gap-2 text-xs text-polli-700">
+                    <CornerUpLeft size={12} />
+                    <span className="font-semibold">Replying to {replyingToMessage.sender.full_name}:</span>
+                    <span className="truncate max-w-[150px] text-earth-600">{replyingToMessage.content}</span>
+                  </div>
+                  <button onClick={() => setReplyingToMessage(null)} className="text-earth-400 hover:text-earth-600"><X size={14} /></button>
+                </div>
+              )}
+
+              <div className="bg-white rounded-full shadow-lg border border-earth-100 p-2 flex items-center gap-2 relative z-10 transition-shadow focus-within:shadow-xl focus-within:border-polli-300">
+                
+                {/* Hidden file inputs */}
+                <input ref={imageInputRef} type="file" accept="image/*,image/gif" className="hidden"
+                  onChange={e => handleFileUpload(e, 'image')} />
+                <input ref={fileInputRef} type="file" accept="*/*" className="hidden"
+                  onChange={e => handleFileUpload(e, 'file')} />
+
+                {/* Left Attachment Buttons */}
+                <div className="flex items-center gap-1 pl-2 relative">
+                  <button onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                    className="p-2 rounded-full hover:bg-polli-50 text-earth-400 hover:text-polli-600 transition-colors"
+                    title="Insert Emoji">
+                    <Smile size={20} />
+                  </button>
+                  {showEmojiPicker && (
+                    <div className="absolute bottom-full left-0 mb-2 bg-white border border-earth-200 shadow-xl rounded-xl p-2 z-50 flex gap-2 w-64 flex-wrap">
+                      {['👍', '🙏', '😊', '✅', '❌', '❤️', '👏', '🤔', '🔥', '🎉'].map(emoji => (
+                        <button key={emoji} className="text-xl hover:bg-earth-100 p-1 rounded transition" onClick={() => setInput(prev => prev + emoji)}>
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <button onClick={() => imageInputRef.current?.click()}
+                    disabled={uploading}
+                    className="p-2 rounded-full hover:bg-polli-50 text-earth-400 hover:text-polli-600 transition-colors disabled:opacity-50"
+                    title="Send image or GIF">
+                    <Image size={20} />
+                  </button>
+                  <button onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                    className="p-2 rounded-full hover:bg-polli-50 text-earth-400 hover:text-polli-600 transition-colors disabled:opacity-50 hidden sm:block"
+                    title="Send file">
+                    <Paperclip size={20} />
+                  </button>
                 </div>
 
-                {input.trim() ? (
-                  <button onClick={sendMessage}
-                    className="p-2.5 rounded-xl bg-polli-600 text-white hover:bg-polli-700 transition">
-                    <Send size={16} />
-                  </button>
-                ) : (
-                  <button onClick={isRecording ? stopRecording : startRecording}
-                    className={`p-2.5 rounded-xl transition ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-earth-100 text-earth-500 hover:bg-earth-200'}`}>
-                    {isRecording ? <Square size={16} /> : <Mic size={16} />}
-                  </button>
-                )}
+                {/* Main Text Input */}
+                <div className="flex-1 relative mx-2">
+                  {/* AI Assistance Buttons floating above input when text exists */}
+                  <div className="absolute -top-10 right-4 flex gap-2 z-20 animate-in slide-in-from-bottom-1">
+                    <button onClick={handleAiSuggestReply} disabled={generatingAiChat} className="flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 px-2 py-1 rounded transition-colors shadow-sm disabled:opacity-50 border border-blue-200">
+                      {generatingAiChat ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />} Suggest Reply
+                    </button>
+                    <button onClick={handleAiCorrectChat} disabled={generatingAiChat} className="flex items-center gap-1 text-[10px] font-bold text-polli-600 bg-polli-50 hover:bg-polli-100 px-2 py-1 rounded transition-colors shadow-sm disabled:opacity-50 border border-polli-200">
+                      {generatingAiChat ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />} Fix Spelling/Grammar
+                    </button>
+                    <button onClick={handleAiImproveChat} disabled={generatingAiChat} className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 px-2 py-1 rounded transition-colors shadow-sm disabled:opacity-50 border border-emerald-200">
+                      {generatingAiChat ? <Loader2 size={10} className="animate-spin" /> : <Sparkles size={10} />} Make Professional
+                    </button>
+                  </div>
+                  {uploading ? (
+                    <div className="flex items-center gap-2 text-sm text-polli-600 font-medium px-4 py-2 bg-polli-50 rounded-full w-fit">
+                      <Loader2 size={16} className="animate-spin" /> Uploading media...
+                    </div>
+                  ) : (
+                    <input 
+                      value={input} 
+                      onChange={e => setInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+                      onFocus={() => socketRef.current?.emit('chat:typing', { userId: user?.user_id, conversationId: selectedConvo.conversation_id, isTyping: true })}
+                      onBlur={() => socketRef.current?.emit('chat:typing', { userId: user?.user_id, conversationId: selectedConvo.conversation_id, isTyping: false })}
+                      placeholder="Message..."
+                      className="w-full bg-transparent px-2 py-2 text-[15px] focus:outline-none placeholder:text-earth-400" 
+                    />
+                  )}
+                </div>
+
+                {/* Right Action Buttons */}
+                <div className="flex items-center gap-1 pr-1">
+                  {input.trim() ? (
+                    <button onClick={sendMessage}
+                      className="h-10 w-10 rounded-full bg-gradient-to-br from-polli-600 to-emerald-600 text-white flex items-center justify-center hover:shadow-md hover:scale-105 transition-all">
+                      <Send size={18} className="ml-1" />
+                    </button>
+                  ) : (
+                    <button onClick={isRecording ? stopRecording : startRecording}
+                      className={`h-10 w-10 rounded-full flex items-center justify-center transition-all ${isRecording ? 'bg-red-500 text-white shadow-lg animate-pulse' : 'bg-earth-100 text-earth-600 hover:bg-earth-200'}`}>
+                      {isRecording ? <Square size={16} /> : <Mic size={18} />}
+                    </button>
+                  )}
+                </div>
               </div>
+              
+              {/* Recording Indicator Toast */}
               {isRecording && (
-                <div className="mt-2 flex items-center gap-2 text-xs text-red-500">
-                  <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" /> Recording... Tap stop to send
+                <div className="absolute bottom-20 left-1/2 -translate-x-1/2 bg-gray-900 text-white px-4 py-2 rounded-full shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom-4">
+                  <div className="flex gap-1">
+                    <span className="h-2 w-1 bg-red-500 rounded-full animate-pulse" />
+                    <span className="h-3 w-1 bg-red-500 rounded-full animate-pulse delay-75" />
+                    <span className="h-2 w-1 bg-red-500 rounded-full animate-pulse delay-150" />
+                  </div>
+                  <span className="text-xs font-bold tracking-wide uppercase">Recording... Tap Stop to send</span>
                 </div>
               )}
             </div>

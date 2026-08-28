@@ -12,7 +12,6 @@ const navItems = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/admin/users', label: 'Users', icon: Users },
   { to: '/admin/services', label: 'Services', icon: Wrench },
-  { to: '/admin/complaints', label: 'Complaints', icon: AlertTriangle },
   { to: '/admin/departments', label: 'Departments', icon: Building2 },
   { to: '/admin/projects', label: 'Projects', icon: FolderOpen },
   { to: '/admin/budgets', label: 'Budgets', icon: DollarSign },
@@ -24,7 +23,6 @@ const mobileNavItems = [
   { to: '/admin', label: 'Home', icon: LayoutDashboard },
   { to: '/admin/users', label: 'Users', icon: Users },
   { to: '/admin/services', label: 'Services', icon: Wrench },
-  { to: '/admin/complaints', label: 'Issues', icon: AlertTriangle },
   { to: '/admin/audit', label: 'Audit', icon: Shield },
 ];
 

@@ -142,6 +142,8 @@ model Service {
   applications Application[]
   provider     User           @relation(fields: [provider_id], references: [user_id])
   category     Category?      @relation(fields: [category_id], references: [category_id])
+  project_id   Int?
+  project      Project?       @relation(fields: [project_id], references: [project_id])
 
   // Chat & Complaints
   conversations ChatConversation[]
@@ -577,6 +579,7 @@ model Project {
 
   department Department? @relation(fields: [department_id], references: [department_id])
   officer    User?       @relation("ProjectOfficer", fields: [assigned_to], references: [user_id])
+  services   Service[]
 
   @@map("projects")
 }

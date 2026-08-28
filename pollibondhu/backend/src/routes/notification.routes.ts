@@ -3,33 +3,9 @@ import { authMiddleware } from '../middleware/auth.middleware';
 import { sendSuccess, sendError } from '../utils/apiResponse';
 import { prisma } from '../patterns/singleton/DatabaseManager';
 import { getIO } from '../utils/socket';
+import { pushNotification, createAndPushNotification } from '../utils/notification.util';
 
 const router = Router();
-
-// Helper: push notification via SSE and Socket.io
-function pushNotification(userId: number, notification: any) {
-  // SSE push
-  const clientKey = `user_${userId}`;
-  const clientRes = (globalThis as any)._notificationClients?.get(clientKey);
-  if (clientRes) {
-    try {
-      clientRes.write(`data: ${JSON.stringify({ type: 'new_notification', notification })}\n\n`);
-    } catch {}
-  }
-  // Socket.io push
-  try {
-    getIO()?.to(`user_${userId}`).emit('notification', notification);
-  } catch {}
-}
-
-// Helper: create notification and push
-async function createAndPush(userId: number, type: string, title: string, message: string) {
-  const notification = await (prisma as any).notification.create({
-    data: { user_id: userId, type, title, message },
-  });
-  pushNotification(userId, notification);
-  return notification;
-}
 
 // Get all notifications for the authenticated user
 router.get('/', authMiddleware, async (req: Request, res: Response) => {
@@ -151,7 +127,7 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
       return;
     }
 
-    const notification = await createAndPush(user_id, type, title, message);
+    const notification = await createAndPushNotification(user_id, type, title, message);
     sendSuccess(res, notification, 'Notification created', 201);
   } catch (err: any) {
     sendError(res, err.message, 500);
@@ -169,7 +145,7 @@ router.post('/broadcast', authMiddleware, async (req: Request, res: Response) =>
 
     const users = await (prisma as any).user.findMany({ where: { is_active: true }, select: { user_id: true } });
     const notifications = await Promise.all(
-      users.map((u: any) => createAndPush(u.user_id, type, title, message))
+      users.map((u: any) => createAndPushNotification(u.user_id, type, title, message))
     );
 
     sendSuccess(res, { count: notifications.length }, 'Broadcast sent');

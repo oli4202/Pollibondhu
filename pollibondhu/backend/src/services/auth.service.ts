@@ -3,6 +3,7 @@ import { UserRepository } from '../repositories/user.repository';
 import { hashPassword, comparePassword } from '../utils/bcrypt';
 import { generateAccessToken, generateRefreshToken } from '../utils/jwt';
 import { logger } from '../patterns/singleton/Logger';
+import { createAndPushNotification } from '../utils/notification.util';
 import crypto from 'crypto';
 
 export class AuthService {
@@ -88,12 +89,11 @@ export class AuthService {
     if (permissionSet.size === 0) {
       const LEGACY: Record<string, string[]> = {
         ADMIN: ['user.view','user.create','user.update','user.delete','role.view','role.create','role.update','role.delete','permission.view','permission.assign','dashboard.admin.view','service.view','service.create','service.update','service.delete','service.approve','complaint.view','complaint.create','complaint.assign','complaint.update','complaint.resolve','application.view','application.process','application.approve','application.reject','budget.view','budget.create','budget.update','budget.approve','project.view','project.create','project.update','project.delete','department.view','department.create','department.update','department.manage_officers','notification.broadcast','audit.view','audit.export','settings.view','settings.update','message.send','message.receive','message.group_create','agriculture.view','agriculture.create','agriculture.update','education.view','institution.create','institution.manage','ngo.view','ngo.create','ngo.manage','event.view','event.create','news.view','news.create','news.publish','waste.view','waste.manage','waste.zone.manage','emergency.view','emergency.manage','emergency.contact.manage'],
-        OFFICER: ['user.view','complaint.view','complaint.update','complaint.assign','complaint.resolve','application.view','application.process','application.approve','application.reject','dashboard.officer.view','message.send','message.receive','message.department_chat','service.view','project.view','project.update','department.view','agriculture.view','agriculture.create','agriculture.update','education.view','event.view','event.create','news.view','waste.view','waste.manage','emergency.view','emergency.manage'],
-        SERVICE_PROVIDER: ['service.view','service.create','service.update','service.delete','message.send','message.receive','dashboard.citizen.view'],
-        GOV_SERVICE_PROVIDER: ['service.view','service.create','service.update','service.delete','application.view','application.process','application.approve','application.reject','message.send','message.receive','message.group_create','dashboard.citizen.view','notification.broadcast'],
-        CITIZEN: ['complaint.create','complaint.view','complaint.verify','complaint.close','application.view','application.create','project.view','project.feedback','message.send','message.receive','dashboard.citizen.view','agriculture.view','education.view','ngo.view','programme.enroll','event.view','event.attend','news.view','emergency.view','waste.report','ai.chat'],
-        USER: ['complaint.create','complaint.view','complaint.verify','complaint.close','application.view','application.create','project.view','project.feedback','message.send','message.receive','dashboard.citizen.view','agriculture.view','education.view','ngo.view','programme.enroll','event.view','event.attend','news.view','emergency.view','waste.report','ai.chat'],
-        FARMER: ['complaint.create','complaint.view','complaint.verify','complaint.close','application.view','application.create','project.view','project.feedback','message.send','message.receive','dashboard.citizen.view','agriculture.view','education.view','ngo.view','programme.enroll','event.view','event.attend','news.view','emergency.view','waste.report','ai.chat'],
+        SERVICE_PROVIDER: ['service.view','service.create','service.update','service.delete','application.view','application.process','application.approve','application.reject','complaint.view','complaint.update','complaint.assign','complaint.resolve','project.view','project.update','department.view','message.send','message.receive','message.department_chat','dashboard.citizen.view','dashboard.officer.view'],
+        GOV_SERVICE_PROVIDER: ['service.view','service.create','service.update','service.delete','application.view','application.process','application.approve','application.reject','complaint.view','complaint.update','complaint.assign','complaint.resolve','project.view','project.update','department.view','message.send','message.receive','message.group_create','message.department_chat','dashboard.citizen.view','dashboard.officer.view','notification.broadcast','agriculture.view','agriculture.create','agriculture.update','education.view','event.view','event.create','news.view','waste.view','waste.manage','emergency.view','emergency.manage'],
+        CITIZEN: ['service.view','complaint.create','complaint.view','complaint.verify','complaint.close','application.view','application.create','project.view','project.feedback','message.send','message.receive','dashboard.citizen.view','agriculture.view','education.view','ngo.view','programme.enroll','event.view','event.attend','news.view','emergency.view','waste.report','ai.chat'],
+        USER: ['service.view','complaint.create','complaint.view','complaint.verify','complaint.close','application.view','application.create','project.view','project.feedback','message.send','message.receive','dashboard.citizen.view','agriculture.view','education.view','ngo.view','programme.enroll','event.view','event.attend','news.view','emergency.view','waste.report','ai.chat'],
+        FARMER: ['service.view','complaint.create','complaint.view','complaint.verify','complaint.close','application.view','application.create','project.view','project.feedback','message.send','message.receive','dashboard.citizen.view','agriculture.view','education.view','ngo.view','programme.enroll','event.view','event.attend','news.view','emergency.view','waste.report','ai.chat'],
       };
       for (const r of roles) {
         for (const p of (LEGACY[r] || [])) permissionSet.add(p);
@@ -101,6 +101,14 @@ export class AuthService {
     }
     
     const permissions = Array.from(permissionSet);
+
+    // Real-time notification for user login
+    await createAndPushNotification(
+      user.user_id,
+      'SYSTEM',
+      'Login Successful',
+      `Welcome back, ${fullUser?.full_name || user.email}!`
+    );
 
     const payload = { user_id: user.user_id, email: user.email, role: user.role };
     return {

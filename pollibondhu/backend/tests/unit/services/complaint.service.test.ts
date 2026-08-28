@@ -48,7 +48,7 @@ describe('ComplaintService', () => {
     it('blocks officers who are not assigned to the complaint', async () => {
       prismaMock.complaint.findUnique.mockResolvedValue({ ...complaint, assigned_to: 99 } as any);
       await expect(service.updateStatus(10, 'REVIEWING', 7, ['OFFICER']))
-        .rejects.toThrow('Only the assigned officer can update this complaint');
+        .rejects.toThrow('Only the assigned officer or provider can update this complaint');
     });
 
     it('allows the assigned officer to progress the complaint', async () => {
@@ -63,11 +63,11 @@ describe('ComplaintService', () => {
       );
     });
 
-    it('lets ADMIN bypass assignment checks', async () => {
+    it('lets SUPER_ADMIN bypass assignment checks', async () => {
       prismaMock.complaint.findUnique.mockResolvedValue(complaint as any);
       prismaMock.complaint.update.mockResolvedValue({ ...complaint, status: 'REVIEWING' } as any);
 
-      await service.updateStatus(10, 'REVIEWING', 1, ['ADMIN']);
+      await service.updateStatus(10, 'REVIEWING', 1, ['SUPER_ADMIN']);
       expect(prismaMock.complaint.update).toHaveBeenCalled();
     });
 

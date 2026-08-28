@@ -8,8 +8,11 @@ import { useToast } from '@/components/feedback/ToastProvider';
 import api from '@/utils/api';
 import {
   AlertTriangle, MessageSquare, Clock, CheckCircle, XCircle,
-  ChevronRight, Send, Loader2, Star, User, Calendar, Tag
+  ChevronRight, Send, Loader2, Star, User, Calendar, Tag, Sparkles
 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import { io, Socket } from 'socket.io-client';
+import { useRef } from 'react';
 
 // ============================================
 // TYPES
@@ -63,12 +66,15 @@ const CATEGORY_LABELS: Record<string, string> = {
 export default function ProviderComplaints() {
   const { addToast } = useToast();
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const socketRef = useRef<Socket | null>(null);
 
   const [complaints, setComplaints] = useState<ProviderComplaint[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<ProviderComplaint | null>(null);
   const [responseText, setResponseText] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [generatingAi, setGeneratingAi] = useState(false);
   const [statusFilter, setStatusFilter] = useState('');
 
   const fetchComplaints = useCallback(async () => {
@@ -86,6 +92,39 @@ export default function ProviderComplaints() {
   }, [statusFilter]);
 
   useEffect(() => { fetchComplaints(); }, [fetchComplaints]);
+
+  // SOCKET.IO REAL-TIME UPDATES
+  useEffect(() => {
+    if (!user) return;
+
+    const token = localStorage.getItem('accessToken');
+    if (!token) return;
+
+    const socket = io(api.defaults.baseURL?.replace('/api', '') || 'http://localhost:4000', {
+      transports: ['websocket', 'polling'],
+      auth: { token },
+    });
+    socketRef.current = socket;
+
+    socket.on('complaint:new', (complaint: ProviderComplaint) => {
+      setComplaints((prev) => [complaint, ...prev]);
+      addToast(`New complaint received: ${complaint.subject}`, 'success');
+    });
+
+    socket.on('complaint:update', (updatedComplaint: ProviderComplaint) => {
+      setComplaints((prev) => prev.map(c => c.complaint_id === updatedComplaint.complaint_id ? updatedComplaint : c));
+      if (selected?.complaint_id === updatedComplaint.complaint_id) {
+        setSelected(updatedComplaint);
+      }
+      addToast(`Complaint updated: ${updatedComplaint.subject}`, 'success');
+    });
+
+    return () => {
+      socket.off('complaint:new');
+      socket.off('complaint:update');
+      socket.disconnect();
+    };
+  }, [user, selected, addToast]);
 
   // ============================================
   // RESPOND TO COMPLAINT
@@ -111,6 +150,28 @@ export default function ProviderComplaints() {
   }
 
   // ============================================
+  // AI AUTO REPLY
+  // ============================================
+  async function handleAiAutoReply(action: 'RESOLVE' | 'RESPOND') {
+    if (!selected) return;
+    setGeneratingAi(true);
+    try {
+      const res = await api.post('/ai/complaint-response', {
+        action,
+        complaintSubject: selected.subject,
+        complaintDescription: selected.description,
+        citizenName: selected.user.full_name,
+      });
+      setResponseText(res.data.response);
+      addToast('AI drafted a response!', 'success');
+    } catch (err) {
+      addToast('Failed to generate AI response', 'error');
+    } finally {
+      setGeneratingAi(false);
+    }
+  }
+
+  // ============================================
   // RESOLVE COMPLAINT
   // ============================================
   async function handleResolve() {
@@ -131,10 +192,10 @@ export default function ProviderComplaints() {
   }
 
   // ============================================
-  // GO TO CHAT
+  // NAVIGATION
   // ============================================
   function goToChat(conversationId: number) {
-    navigate('/provider/messages');
+    navigate('/provider/messages', { state: { conversationId } });
   }
 
   // ============================================
@@ -335,9 +396,19 @@ export default function ProviderComplaints() {
                   {/* Response Input */}
                   {selected.status !== 'RESOLVED' && selected.status !== 'CLOSED' && (
                     <div>
-                      <label className="text-[10px] font-semibold text-earth-400 uppercase mb-1 block">
-                        {selected.response ? 'Update Response' : 'Your Response'}
-                      </label>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="text-[10px] font-semibold text-earth-400 uppercase block">
+                          {selected.response ? 'Update Response' : 'Your Response'}
+                        </label>
+                        <button
+                          onClick={() => handleAiAutoReply('RESPOND')}
+                          disabled={generatingAi}
+                          className="flex items-center gap-1 text-[10px] font-bold text-polli-600 bg-polli-50 hover:bg-polli-100 px-2 py-1 rounded transition-colors disabled:opacity-50"
+                        >
+                          {generatingAi ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+                          AI Auto Reply
+                        </button>
+                      </div>
                       <textarea
                         value={responseText}
                         onChange={e => setResponseText(e.target.value)}

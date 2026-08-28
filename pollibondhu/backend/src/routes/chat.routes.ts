@@ -4,6 +4,7 @@ import { authMiddleware } from '../middleware/auth.middleware';
 import { sendSuccess, sendError } from '../utils/apiResponse';
 import { prisma } from '../patterns/singleton/DatabaseManager';
 import { chatUpload } from '../utils/upload';
+import { getIO } from '../utils/socket';
 
 const router = Router();
 
@@ -288,6 +289,50 @@ router.post('/conversations/:id/messages', authMiddleware, async (req: Request, 
   } catch (err: any) { sendError(res, err.message, 500); }
 });
 
+// Edit a message
+router.put('/messages/:id', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.user_id;
+    const messageId = parseInt(req.params.id);
+    const { content } = req.body;
+
+    const message = await (prisma as any).chatMessage.findUnique({ where: { message_id: messageId } });
+    if (!message) { sendError(res, 'Message not found', 404); return; }
+    if (message.sender_id !== userId) { sendError(res, 'Unauthorized', 403); return; }
+    if (message.is_deleted) { sendError(res, 'Message deleted', 400); return; }
+
+    const updated = await (prisma as any).chatMessage.update({
+      where: { message_id: messageId },
+      data: { content },
+      include: { sender: { select: { user_id: true, full_name: true, avatar_url: true, role: true } } },
+    });
+
+    getIO()?.to(`chat_${message.conversation_id}`).emit('chat:edit', updated);
+    sendSuccess(res, updated, 'Message edited');
+  } catch (err: any) { sendError(res, err.message, 500); }
+});
+
+// Delete a message
+router.delete('/messages/:id', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.user_id;
+    const messageId = parseInt(req.params.id);
+
+    const message = await (prisma as any).chatMessage.findUnique({ where: { message_id: messageId } });
+    if (!message) { sendError(res, 'Message not found', 404); return; }
+    if (message.sender_id !== userId) { sendError(res, 'Unauthorized', 403); return; }
+
+    const deleted = await (prisma as any).chatMessage.update({
+      where: { message_id: messageId },
+      data: { is_deleted: true, content: 'This message was deleted', media_url: null },
+      include: { sender: { select: { user_id: true, full_name: true, avatar_url: true, role: true } } },
+    });
+
+    getIO()?.to(`chat_${message.conversation_id}`).emit('chat:delete', deleted);
+    sendSuccess(res, deleted, 'Message deleted');
+  } catch (err: any) { sendError(res, err.message, 500); }
+});
+
 // Mark messages as read in a conversation
 router.post('/conversations/:id/read', authMiddleware, async (req: Request, res: Response) => {
   try {
@@ -514,6 +559,17 @@ router.post('/complaints', authMiddleware, async (req: Request, res: Response) =
       },
     });
 
+    getIO()?.to(`user_${provider_id}`).emit('complaint:new', complaint);
+
+    await (prisma as any).notification.create({
+      data: {
+        user_id: provider_id,
+        type: 'IN_APP',
+        title: 'New Complaint Received',
+        message: `A new complaint has been filed by ${complaint.user.full_name}: "${subject}"`,
+      }
+    });
+
     sendSuccess(res, complaint, 'Complaint filed', 201);
   } catch (err: any) { sendError(res, err.message, 500); }
 });
@@ -555,6 +611,23 @@ router.put('/complaints/:id/respond', authMiddleware, async (req: Request, res: 
         status: status || 'IN_PROGRESS',
         responded_at: new Date(),
       },
+      include: {
+        user: { select: { full_name: true, avatar_url: true } },
+        provider: { select: { full_name: true, avatar_url: true } },
+        service: { select: { title: true } },
+      }
+    });
+
+    getIO()?.to(`user_${complaint.user_id}`).emit('complaint:update', complaint);
+    getIO()?.to(`user_${complaint.provider_id}`).emit('complaint:update', complaint);
+
+    await (prisma as any).notification.create({
+      data: {
+        user_id: complaint.user_id,
+        type: 'IN_APP',
+        title: 'Complaint Update',
+        message: `The provider has responded to your complaint: "${complaint.subject}"`,
+      }
     });
 
     sendSuccess(res, complaint, 'Complaint updated');
@@ -575,6 +648,23 @@ router.put('/complaints/:id/resolve', authMiddleware, async (req: Request, res: 
         rating: rating || null,
         feedback: feedback || null,
       },
+      include: {
+        user: { select: { full_name: true, avatar_url: true } },
+        provider: { select: { full_name: true, avatar_url: true } },
+        service: { select: { title: true } },
+      }
+    });
+
+    getIO()?.to(`user_${complaint.provider_id}`).emit('complaint:update', complaint);
+    getIO()?.to(`user_${complaint.user_id}`).emit('complaint:update', complaint);
+
+    await (prisma as any).notification.create({
+      data: {
+        user_id: complaint.user_id,
+        type: 'IN_APP',
+        title: 'Complaint Resolved',
+        message: `Your complaint has been marked as resolved: "${complaint.subject}"`,
+      }
     });
 
     sendSuccess(res, complaint, 'Complaint resolved');

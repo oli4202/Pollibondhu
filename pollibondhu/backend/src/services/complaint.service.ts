@@ -23,9 +23,10 @@ export class ComplaintService {
     logger.info(`Admin ${admin_id} updating complaint ${complaint_id} to ${status}`);
     const existing = await this.repo.findById(complaint_id);
     if (!existing) throw new Error('Complaint not found');
-    const isAdministrator = roles.some((role) => ['ADMIN', 'SUPER_ADMIN', 'SUB_ADMIN'].includes(role));
-    if (!isAdministrator && existing.assigned_to !== admin_id) {
-      throw new Error('Only the assigned officer can update this complaint');
+    const isAdministrator = roles.some((role) => ['SUPER_ADMIN'].includes(role));
+    const isGovProvider = roles.includes('GOV_SERVICE_PROVIDER');
+    if (!isAdministrator && !isGovProvider && existing.assigned_to !== admin_id) {
+      throw new Error('Only the assigned officer or provider can update this complaint');
     }
     if (['RESOLVED', 'REJECTED'].includes(status) && !notes?.trim()) {
       throw new Error('Resolution notes are required when resolving or rejecting a complaint');

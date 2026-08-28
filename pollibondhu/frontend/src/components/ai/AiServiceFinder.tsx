@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { FileText, Sparkles, Bot, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
@@ -14,19 +15,19 @@ const commonNeeds = [
 export default function AiServiceFinder() {
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState('');
+  const [result, setResult] = useState<any>(null);
   const [query, setQuery] = useState('');
   const [district, setDistrict] = useState('');
 
   async function findService() {
     if (!query) return;
     setLoading(true);
-    setResult('');
+    setResult(null);
     try {
       const res = await api.post('/ai/service-finder', { query, district });
       setResult(res.data.response);
     } catch {
-      setResult('Could not find service information. Please try again.');
+      setResult({ message: 'Could not find service information. Please try again.', action_links: [] });
     } finally { setLoading(false); }
   }
 
@@ -62,13 +63,13 @@ export default function AiServiceFinder() {
               <input value={query} onChange={e => setQuery(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && findService()}
                 placeholder="Or type what you need..."
-                className="w-full border border-earth-200 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-polli-500" />
+                className="w-full bg-white text-earth-900 border border-earth-200 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-polli-500" />
             </div>
 
             <div>
               <label className="text-xs font-bold text-earth-600 mb-1 block">Your district (optional)</label>
               <select value={district} onChange={e => setDistrict(e.target.value)}
-                className="w-full border border-earth-200 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-polli-500">
+                className="w-full bg-white text-earth-900 border border-earth-200 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-polli-500">
                 <option value="">All districts</option>
                 {['Dhaka', 'Chattogram', 'Rajshahi', 'Khulna', 'Barishal', 'Sylhet', 'Rangpur', 'Mymensingh'].map(d =>
                   <option key={d} value={d}>{d}</option>
@@ -84,7 +85,16 @@ export default function AiServiceFinder() {
             {result && (
               <div className="p-4 bg-polli-50 rounded-xl border border-polli-200">
                 <div className="flex items-center gap-2 mb-2"><Bot size={16} className="text-polli-600" /><span className="text-xs font-bold text-polli-700">Service Guide</span></div>
-                <div className="text-sm text-earth-700 whitespace-pre-wrap leading-relaxed">{result}</div>
+                <div className="text-sm text-earth-700 whitespace-pre-wrap leading-relaxed">{result.message || (typeof result === 'string' ? result : '')}</div>
+                {result.action_links && result.action_links.length > 0 && (
+                  <div className="mt-4 flex flex-wrap gap-2 border-t border-polli-200/60 pt-3">
+                    {result.action_links.map((link: any, i: number) => (
+                      <Link key={i} to={link.url} className="inline-flex items-center gap-1.5 bg-polli-600 hover:bg-polli-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition shadow-sm">
+                        {link.title} <Sparkles size={12} />
+                      </Link>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

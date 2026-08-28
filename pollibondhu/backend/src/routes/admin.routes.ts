@@ -1,18 +1,25 @@
 import { Router, Request, Response } from 'express';
-import { getDashboardStats, getWeeklyStats, adminListUsers, adminListServices, adminListComplaints } from '../controllers/admin.controller';
+import { getDashboardStats, getSubAdminDashboardStats, getOfficerDashboardStats, getWeeklyStats, adminListUsers, adminListServices, adminListComplaints } from '../controllers/admin.controller';
 import { authMiddleware, requirePermission, requireAnyPermission } from '../middleware/auth.middleware';
 import { sendSuccess, sendError } from '../utils/apiResponse';
 import { prisma } from '../patterns/singleton/DatabaseManager';
 import { appEventSubject } from '../patterns/observer/NotificationSubject';
+import { adminListDepartments, adminCreateDepartment } from '../controllers/department.controller';
 
 const router = Router();
 
 // Dashboard — requires dashboard permission
 router.get('/dashboard', authMiddleware, requireAnyPermission('dashboard.super.view', 'dashboard.admin.view', 'dashboard.subadmin.view'), getDashboardStats);
+router.get('/sub-dashboard-stats', authMiddleware, requireAnyPermission('dashboard.subadmin.view', 'dashboard.admin.view', 'dashboard.super.view'), getSubAdminDashboardStats);
+router.get('/officer-dashboard-stats', authMiddleware, requireAnyPermission('dashboard.officer.view', 'dashboard.admin.view', 'dashboard.super.view'), getOfficerDashboardStats);
 router.get('/dashboard/weekly', authMiddleware, requireAnyPermission('dashboard.super.view', 'dashboard.admin.view', 'dashboard.subadmin.view'), getWeeklyStats);
 
 // User management — requires user.view
 router.get('/users', authMiddleware, requirePermission('user.view'), adminListUsers);
+
+// Department management
+router.get('/departments', authMiddleware, requirePermission('department.view'), adminListDepartments);
+router.post('/departments', authMiddleware, requirePermission('department.create'), adminCreateDepartment);
 
 // Create user (admin)
 router.post('/users', authMiddleware, requirePermission('user.create'), async (req: Request, res: Response) => {
@@ -212,11 +219,113 @@ router.put('/complaints/:id/assign', authMiddleware, requirePermission('complain
   } catch (err: any) { sendError(res, err.message, 500); }
 });
 
-// Department management
-router.get('/departments', authMiddleware, requirePermission('department.view'), async (req: Request, res: Response) => {
+// ========== PROJECT MANAGEMENT ==========
+router.get('/projects', authMiddleware, requirePermission('project.view'), async (req: Request, res: Response) => {
   try {
-    const departments = await prisma.department.findMany({ include: { _count: { select: { users: true } } } });
-    sendSuccess(res, departments);
+    const projects = await prisma.project.findMany({
+      orderBy: { created_at: 'desc' },
+      include: {
+        department: { select: { name: true } },
+        officer: { select: { full_name: true } },
+        services: { select: { service_id: true, title: true, price: true } },
+      },
+    });
+    sendSuccess(res, projects);
+  } catch (err: any) { sendError(res, err.message, 500); }
+});
+
+router.post('/projects', authMiddleware, requirePermission('project.create'), async (req: Request, res: Response) => {
+  try {
+    const { title, description, budget, funding_source, contractor, deadline, department_id, status } = req.body;
+    if (!title || !description || budget === undefined) return sendError(res, 'title, description, budget are required', 400);
+    const project = await prisma.project.create({
+      data: {
+        title,
+        description,
+        budget,
+        funding_source,
+        contractor,
+        deadline: deadline ? new Date(deadline) : null,
+        department_id: department_id ? parseInt(department_id) : null,
+        assigned_to: (req as any).user?.user_id,
+        status: status || 'PLANNED',
+      },
+    });
+    const adminId = (req as any).user?.user_id;
+    if (adminId) {
+      await prisma.notification.create({
+        data: { user_id: adminId, type: 'SYSTEM', title: 'Project Created', message: `Project "${title}" created with budget ৳${budget}.` },
+      });
+    }
+    sendSuccess(res, project, 'Project created', 201);
+  } catch (err: any) { sendError(res, err.message, 500); }
+});
+
+router.put('/projects/:id', authMiddleware, requirePermission('project.update'), async (req: Request, res: Response) => {
+  try {
+    const projectId = parseInt(req.params.id);
+    const { title, description, budget, spent, progress, status, funding_source, contractor, deadline, department_id } = req.body;
+    const project = await prisma.project.update({
+      where: { project_id: projectId },
+      data: {
+        ...(title && { title }),
+        ...(description && { description }),
+        ...(budget !== undefined && { budget }),
+        ...(spent !== undefined && { spent }),
+        ...(progress !== undefined && { progress }),
+        ...(status && { status }),
+        ...(funding_source && { funding_source }),
+        ...(contractor && { contractor }),
+        ...(deadline && { deadline: new Date(deadline) }),
+        ...(department_id && { department_id: parseInt(department_id) }),
+      },
+    });
+    sendSuccess(res, project, 'Project updated');
+  } catch (err: any) { sendError(res, err.message, 500); }
+});
+
+router.delete('/projects/:id', authMiddleware, requirePermission('project.delete'), async (req: Request, res: Response) => {
+  try {
+    const projectId = parseInt(req.params.id);
+    await prisma.project.delete({ where: { project_id: projectId } });
+    sendSuccess(res, null, 'Project deleted');
+  } catch (err: any) { sendError(res, err.message, 500); }
+});
+
+// ========== BUDGET OVERVIEW (aggregated from projects) ==========
+router.get('/budgets', authMiddleware, requirePermission('budget.view'), async (req: Request, res: Response) => {
+  try {
+    // Get department-level budget aggregation from projects
+    const departments = await prisma.department.findMany({
+      select: {
+        department_id: true,
+        name: true,
+        projects: {
+          select: { budget: true, spent: true, status: true },
+        },
+      },
+    });
+    const budgetData = departments.map(dept => {
+      const allocated = dept.projects.reduce((sum, p) => sum + Number(p.budget), 0);
+      const spent = dept.projects.reduce((sum, p) => sum + Number(p.spent), 0);
+      const projectCount = dept.projects.length;
+      const completedCount = dept.projects.filter(p => p.status === 'COMPLETED').length;
+      return {
+        department_id: dept.department_id,
+        department: dept.name,
+        allocated,
+        spent,
+        remaining: allocated - spent,
+        projectCount,
+        completedCount,
+      };
+    });
+    const totals = {
+      totalAllocated: budgetData.reduce((s, b) => s + b.allocated, 0),
+      totalSpent: budgetData.reduce((s, b) => s + b.spent, 0),
+      totalRemaining: budgetData.reduce((s, b) => s + b.remaining, 0),
+    };
+    sendSuccess(res, { budgetData, totals });
   } catch (err: any) { sendError(res, err.message, 500); }
 });
 

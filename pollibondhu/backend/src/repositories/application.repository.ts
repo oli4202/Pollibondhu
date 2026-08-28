@@ -28,13 +28,14 @@ export class ApplicationRepository {
     });
   }
 
-  async findAll(options: { page: number; limit: number; status?: string; user_id?: number; service_id?: number; department_id?: number }) {
-    const { page, limit, status, user_id, service_id, department_id } = options;
+  async findAll(options: { page: number; limit: number; status?: string; user_id?: number; service_id?: number; department_id?: number; provider_id?: number }) {
+    const { page, limit, status, user_id, service_id, department_id, provider_id } = options;
     const where: Prisma.ApplicationWhereInput = {};
     if (status) where.status = status;
     if (user_id) where.user_id = user_id;
     if (service_id) where.service_id = service_id;
     if (department_id) where.department_id = department_id;
+    if (provider_id) where.service = { provider_id };
 
     const [data, total] = await Promise.all([
       this.prisma.application.findMany({
@@ -46,6 +47,8 @@ export class ApplicationRepository {
           user: { select: { full_name: true, email: true, district: true } },
           service: { select: { title: true } },
           department: { select: { name: true } },
+          documents: true,
+          updates: { orderBy: { created_at: 'desc' }, include: { user: { select: { full_name: true } } } },
         },
       }),
       this.prisma.application.count({ where }),

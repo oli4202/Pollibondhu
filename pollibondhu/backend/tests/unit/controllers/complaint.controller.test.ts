@@ -59,7 +59,10 @@ describe('Complaint Controller', () => {
       const where: any = prismaMock.complaint.findMany.mock.calls[0]?.[0]?.where ?? {};
       expect(where.user_id).toBe(5);
       expect(where.assigned_to).toBeUndefined();
-      expect(res.status).not.toHaveBeenCalled(); // default 200 via sendSuccess
+      expect(res.status).toHaveBeenCalledWith(200); // success envelope via sendSuccess
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ success: true })
+      );
     });
 
     it('officers see complaints assigned to them', async () => {
@@ -73,7 +76,7 @@ describe('Complaint Controller', () => {
     });
 
     it('admins see everything without scoping', async () => {
-      const req = makeReq({ user: { user_id: 1, roles: ['ADMIN'] } });
+      const req = makeReq({ user: { user_id: 1, roles: ['SUPER_ADMIN'] } });
       const res = makeRes();
       await complaintController.listComplaints(req, res);
 

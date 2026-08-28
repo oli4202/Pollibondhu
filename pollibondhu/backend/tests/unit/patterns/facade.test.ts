@@ -16,38 +16,53 @@ describe('Facade Pattern — AdminDashboardFacade', () => {
 
   describe('getDashboardStats', () => {
     it('aggregates counts across all tables into one DTO', async () => {
+      // The new facade calls: user.count (x2), providerComplaint.count, project.count,
+      // providerComplaint.findMany, department.findMany, user.findMany
       prismaMock.user.count
-        .mockResolvedValueOnce(100) // totalUsers
-        .mockResolvedValueOnce(80) // activeUsers
-        .mockResolvedValueOnce(15); // totalProviders
-      prismaMock.service.count
-        .mockResolvedValueOnce(50) // totalServices
-        .mockResolvedValueOnce(5); // pendingServices
-      prismaMock.forumPost.count.mockResolvedValue(200);
-      prismaMock.complaint.count.mockResolvedValue(3);
-      prismaMock.auditLog.findMany.mockResolvedValue([
-        { id: 1, admin: { full_name: 'Admin' } },
-      ] as any);
+        .mockResolvedValueOnce(500)    // CITIZEN count
+        .mockResolvedValueOnce(20);    // active providers count
+      prismaMock.providerComplaint.count.mockResolvedValue(3);
+      prismaMock.project.count.mockResolvedValue(8);
+      prismaMock.providerComplaint.findMany.mockResolvedValue([]);
+      prismaMock.department.findMany.mockResolvedValue([]);
+      prismaMock.user.findMany.mockResolvedValue([]);
 
       const stats = await facade.getDashboardStats();
 
-      expect(stats).toEqual({
-        totalUsers: 100,
-        activeUsers: 80,
-        totalProviders: 15,
-        totalServices: 50,
-        pendingServices: 5,
-        totalPosts: 200,
-        pendingComplaints: 3,
-        recentActivities: [{ id: 1, admin: { full_name: 'Admin' } }],
-      });
+      expect(stats.totalUsers).toBe(500);
+      expect(stats.activeProviders).toBe(20);
+      expect(stats.pendingEscalations).toBe(3);
+      expect(stats.activeProjects).toBe(8);
+      expect(stats).toHaveProperty('escalatedComplaints');
+      expect(stats).toHaveProperty('providerPerformance');
+      expect(stats).toHaveProperty('departmentStats');
+      expect(stats).toHaveProperty('budgetOverview');
+    });
 
-      // Facade filtered by role / status on our behalf
-      expect(prismaMock.user.count).toHaveBeenCalledWith({ where: { is_active: true } });
-      expect(prismaMock.service.count).toHaveBeenCalledWith({ where: { status: 'PENDING' } });
-      expect(prismaMock.complaint.count).toHaveBeenCalledWith({
-        where: { status: { in: ['PENDING', 'REVIEWING'] } },
-      });
+    it('calculates department budget totals', async () => {
+      prismaMock.user.count.mockResolvedValue(10);
+      prismaMock.providerComplaint.count.mockResolvedValue(0);
+      prismaMock.project.count.mockResolvedValue(2);
+      prismaMock.providerComplaint.findMany.mockResolvedValue([]);
+      prismaMock.department.findMany.mockResolvedValue([
+        {
+          department_id: 1,
+          name: 'Health',
+          _count: { applications: 5, projects: 2, complaints: 3 },
+          projects: [
+            { budget: 100000, spent: 40000, status: 'IN_PROGRESS' },
+            { budget: 50000, spent: 50000, status: 'COMPLETED' },
+          ],
+        },
+      ] as any);
+      prismaMock.user.findMany.mockResolvedValue([]);
+
+      const stats = await facade.getDashboardStats();
+
+      expect(stats.departmentStats[0].budget).toBe(150000);
+      expect(stats.departmentStats[0].spent).toBe(90000);
+      expect(stats.departmentStats[0].remaining).toBe(60000);
+      expect(stats.budgetOverview.totalAllocated).toBe(150000);
     });
   });
 
@@ -89,6 +104,52 @@ describe('Facade Pattern — AdminDashboardFacade', () => {
       expect(prismaMock.complaint.count).toHaveBeenCalledWith({
         where: expect.objectContaining({ status: 'RESOLVED' }),
       });
+    });
+  });
+
+  describe('getSubAdminDashboardStats', () => {
+    it('returns error when no departments assigned', async () => {
+      prismaMock.userDepartment.findMany.mockResolvedValue([]);
+      const result = await facade.getSubAdminDashboardStats(7);
+      expect(result).toHaveProperty('error');
+    });
+
+    it('returns aggregated stats for assigned departments', async () => {
+      prismaMock.userDepartment.findMany.mockResolvedValue([
+        { department_id: 1, department: { name: 'Agriculture' } },
+      ] as any);
+      prismaMock.userDepartment.count.mockResolvedValue(5);
+      (prismaMock.complaint.groupBy as unknown as jest.Mock).mockResolvedValue([
+        { status: 'PENDING', _count: 3 },
+        { status: 'RESOLVED', _count: 2 },
+      ]);
+      (prismaMock.application.groupBy as unknown as jest.Mock).mockResolvedValue([
+        { status: 'SUBMITTED', _count: 4 },
+        { status: 'APPROVED', _count: 1 },
+      ]);
+      prismaMock.project.findMany.mockResolvedValue([]);
+
+      const result = await facade.getSubAdminDashboardStats(7);
+
+      expect(result.departments).toBe('Agriculture');
+      expect(result.officers).toBe(5);
+      expect(result.complaints.total).toBe(5);
+      expect(result.complaints.resolved).toBe(2);
+      expect(result.applications.total).toBe(5);
+      expect(result.applications.approved).toBe(1);
+    });
+  });
+
+  describe('getOfficerDashboardStats', () => {
+    it('returns task, application, complaint, and message counts for an officer', async () => {
+      prismaMock.project.count.mockResolvedValue(3);
+      prismaMock.complaint.count.mockResolvedValue(2);
+      prismaMock.message.count.mockResolvedValue(4);
+      prismaMock.application.count.mockResolvedValue(7);
+
+      const result = await facade.getOfficerDashboardStats(10);
+
+      expect(result).toEqual({ tasks: 3, applications: 7, complaints: 2, messages: 4 });
     });
   });
 });

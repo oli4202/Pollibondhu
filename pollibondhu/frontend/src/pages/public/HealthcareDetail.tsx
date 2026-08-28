@@ -214,6 +214,32 @@ export default function HealthcareDetail() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  
+  const handleAutoFill = () => {
+    const dummyData: Record<string, string> = {};
+    fields.forEach(f => {
+      const name = f.name.toLowerCase();
+      if (f.type === 'select' && f.options && f.options.length > 0) {
+        dummyData[f.name] = f.options[Math.floor(Math.random() * f.options.length)];
+      } else if (f.type === 'date') {
+        dummyData[f.name] = '1995-05-15';
+      } else if (f.type === 'tel' || name.includes('phone')) {
+        dummyData[f.name] = '01712345678';
+      } else if (name.includes('nid')) {
+        dummyData[f.name] = '1234567890';
+      } else if (f.type === 'number') {
+        dummyData[f.name] = name.includes('age') ? '25' : '65';
+      } else if (name.includes('name')) {
+        dummyData[f.name] = 'Jane Doe';
+      } else if (name.includes('location') || name.includes('district')) {
+        dummyData[f.name] = 'Dhaka';
+      } else {
+        dummyData[f.name] = 'Demo Information Data';
+      }
+    });
+    setFormData(dummyData);
+    setErrors({});
+  };
 
   const data = healthcareServices[service || ''] || null;
   const fields = formFields[service || ''] || [];
@@ -296,7 +322,17 @@ export default function HealthcareDetail() {
       {/* Application Form */}
       <Card className="mb-6">
         <CardContent>
-          <h3 className="text-lg font-bold mb-6 flex items-center gap-2"><Heart size={18} className="text-red-500" /> {data.title} Form</h3>
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-bold flex items-center gap-2"><Heart size={18} className="text-red-500" /> {data.title} Form</h3>
+            <button 
+              type="button" 
+              onClick={handleAutoFill}
+              className="text-xs px-3 py-1.5 bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100 rounded-lg font-medium transition flex items-center gap-1 shadow-sm"
+              title="Click here to auto-fill realistic demo data for your presentation"
+            >
+              <Sparkles size={14} /> Auto-Fill Demo
+            </button>
+          </div>
 
           {!user && (
             <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">

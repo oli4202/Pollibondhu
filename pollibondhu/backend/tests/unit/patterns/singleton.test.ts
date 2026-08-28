@@ -6,6 +6,9 @@
  * PrismaClient only connects lazily on first query.
  */
 jest.unmock('../../../src/patterns/singleton/Logger');
+// Use the REAL singletons here — the point of these tests is to verify the
+// singleton contract itself, not the mocked stand-ins from setup.ts.
+jest.unmock('../../../src/patterns/singleton/DatabaseManager');
 
 import { DatabaseManager } from '../../../src/patterns/singleton/DatabaseManager';
 import { Logger } from '../../../src/patterns/singleton/Logger';

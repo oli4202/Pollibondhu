@@ -6,7 +6,7 @@
  */
 import { prismaMock } from '../../setup';
 import * as authController from '../../../src/controllers/auth.controller';
-import { hashPassword } from '../../../src/utils/bcrypt';
+import { hashPassword, comparePassword } from '../../../src/utils/bcrypt';
 import {
   generateAccessToken,
   generateRefreshToken,
@@ -35,6 +35,7 @@ const dbUser = {
 describe('Auth Controller', () => {
   beforeEach(() => {
     (hashPassword as jest.Mock).mockResolvedValue('$2a$12$hash');
+    (comparePassword as jest.Mock).mockResolvedValue(true);
     (generateAccessToken as jest.Mock).mockReturnValue('access-token');
     (generateRefreshToken as jest.Mock).mockReturnValue('refresh-token');
   });

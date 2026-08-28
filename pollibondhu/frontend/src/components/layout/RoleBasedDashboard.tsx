@@ -27,12 +27,17 @@ export default function RoleBasedDashboard() {
   // Check by role (with legacy compatibility)
   const roles = user.roles || [user.role];
 
-  // ADMIN → full admin dashboard
-  if (roles.includes('ADMIN') || hasPermission('dashboard.admin.view')) {
+  // SUPER_ADMIN or ADMIN → full admin dashboard
+  if (roles.includes('SUPER_ADMIN') || roles.includes('ADMIN') || hasPermission('dashboard.super.view') || hasPermission('dashboard.admin.view')) {
     return <AdminDashboard />;
   }
 
-  // Officer → assigned tasks dashboard
+  // SUB_ADMIN → sub-admin dashboard
+  if (roles.includes('SUB_ADMIN') || hasPermission('dashboard.subadmin.view')) {
+    return <SubAdminDashboard />;
+  }
+
+  // OFFICER → officer dashboard
   if (roles.includes('OFFICER') || hasPermission('dashboard.officer.view')) {
     return <OfficerDashboard />;
   }

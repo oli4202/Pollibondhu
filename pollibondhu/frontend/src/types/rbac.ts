@@ -1,7 +1,6 @@
 /** All system roles */
 export enum Role {
   ADMIN = 'ADMIN',           // Full system administrator
-  OFFICER = 'OFFICER',       // Government officer
   SERVICE_PROVIDER = 'SERVICE_PROVIDER',
   GOV_SERVICE_PROVIDER = 'GOV_SERVICE_PROVIDER',
   NGO_ADMIN = 'NGO_ADMIN',

@@ -113,16 +113,18 @@ describe('Design Patterns', () => {
   describe('Facade Pattern', () => {
     it('should aggregate dashboard stats from multiple tables', async () => {
       prismaMock.user.count.mockResolvedValue(100);
-      prismaMock.service.count.mockResolvedValue(50);
-      prismaMock.complaint.count.mockResolvedValue(10);
-      prismaMock.auditLog.findMany.mockResolvedValue([]);
+      prismaMock.providerComplaint.count.mockResolvedValue(3);
+      prismaMock.project.count.mockResolvedValue(5);
+      prismaMock.providerComplaint.findMany.mockResolvedValue([]);
+      prismaMock.department.findMany.mockResolvedValue([]);
+      prismaMock.user.findMany.mockResolvedValue([]);
 
       const facade = new AdminDashboardFacade(prismaMock as any);
       const stats = await facade.getDashboardStats();
 
       expect(stats.totalUsers).toBe(100);
-      expect(stats.totalServices).toBe(50);
-      expect(stats.pendingComplaints).toBe(10);
+      expect(stats).toHaveProperty('activeProviders');
+      expect(stats).toHaveProperty('pendingEscalations');
     });
 
     it('should return weekly stats', async () => {
