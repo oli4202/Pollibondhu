@@ -29,13 +29,183 @@ Rural areas often suffer from disconnected services and lack of access to real-t
 
 ## 📋 Table of Contents
 
+- [System Architecture & Diagrams](#️-system-architecture--diagrams)
+  - [ERD Visualization](#1-erd-visualization)
+  - [System Architecture Visualization](#2-system-architecture-visualization)
+  - [Architecture Decision (ADS)](#3-architecture-decision-ads)
+  - [App Flow Diagram](#4-app-flow-diagram)
+  - [User Journey End-to-End](#5-user-journey-end-to-end-view)
+  - [Visual Identity & Direction](#6-visual-identity--direction)
 - [Design Patterns](#-design-patterns)
 - [Software Testing](#-software-testing)
 - [Roles & Responsibilities](#-roles--responsibilities)
-- [Architecture](#-architecture)
+- [Architecture (Folder Structure)](#-architecture-folder-structure)
 - [Departments](#-departments)
 - [Getting Started](#-getting-started)
 - [Real-Time Features](#-real-time-features)
+
+---
+
+## 🗺️ System Architecture & Diagrams
+
+### 1. ERD Visualization
+The Entity-Relationship Diagram (ERD) defines the core data structures and their relationships. At the center is the **User** entity, governed by **Roles** and **Permissions**. Users interact with **Services** through **Applications**, or raise **Complaints** assigned to **Departments**.
+
+```mermaid
+erDiagram
+    USER ||--o{ USER_ROLE : has
+    USER ||--o{ APPLICATION : submits
+    USER ||--o{ COMPLAINT : files
+    USER ||--o{ NOTIFICATION : receives
+    ROLE ||--o{ USER_ROLE : assigns
+    ROLE ||--o{ ROLE_PERMISSION : grants
+    PERMISSION ||--o{ ROLE_PERMISSION : belongs_to
+    DEPARTMENT ||--o{ USER_DEPARTMENT : manages
+    USER ||--o{ USER_DEPARTMENT : belongs_to
+    SERVICE ||--o{ APPLICATION : receives
+    CATEGORY ||--o{ SERVICE : groups
+    CATEGORY ||--o{ COMPLAINT : categorizes
+
+    USER {
+        int user_id PK
+        string email
+        string password_hash
+        string full_name
+        string role
+    }
+    SERVICE {
+        int service_id PK
+        int provider_id FK
+        string title
+        float price
+    }
+    APPLICATION {
+        int application_id PK
+        int user_id FK
+        int service_id FK
+        string status
+    }
+    COMPLAINT {
+        int complaint_id PK
+        int user_id FK
+        string subject
+        string status
+    }
+```
+
+### 2. System Architecture Visualization
+PolliBondhu follows a modern, scalable **Client-Server Architecture** utilizing a RESTful API backend and a reactive frontend, augmented with WebSockets for real-time features.
+
+```mermaid
+graph TD
+    Client[Web Browser / Citizen Mobile] -->|HTTP/REST| API[Express.js Node Backend]
+    Client -->|WebSocket| Socket[Socket.io Server]
+    
+    subgraph Backend Server
+        API --> AuthM[Auth Middleware]
+        API --> Router[API Routes]
+        Router --> Controller[Controllers]
+        Controller --> Service[Business Logic Services]
+        Service --> Facade[Design Pattern Facades/Factories]
+        Facade --> Repo[Prisma Repositories]
+        Socket --> EventHub[Notification Manager / Observer]
+        EventHub --> Repo
+    end
+    
+    Repo -->|Prisma ORM| DB[(Database - PostgreSQL/SQLite)]
+```
+
+### 3. Architecture Decision (ADS)
+The Architectural Decision System reflects the core technology choices made for this platform, prioritizing speed, accessibility, and type safety.
+
+```mermaid
+mindmap
+  root((PolliBondhu ADS))
+    Frontend
+      React 18
+        Component Reusability
+        Virtual DOM Speed
+      TailwindCSS
+        Rapid Prototyping
+        Consistent Design System
+      Vite
+        Fast HMR
+        Optimized Build
+    Backend
+      Node.js & Express
+        Non-blocking I/O
+        Extensive Ecosystem
+      TypeScript
+        Type Safety
+        Developer Experience
+    Database
+      Prisma ORM
+        Schema Migrations
+        Type-Safe Queries
+      SQLite / PostgreSQL
+        Relational Integrity
+    Real-Time
+      Socket.io
+        Event-driven notifications
+        Live chat rooms
+```
+
+### 4. App Flow Diagram
+This diagram illustrates the high-level application routing flow. Upon visiting the platform, users are routed dynamically based on their RBAC (Role-Based Access Control) permissions.
+
+```mermaid
+flowchart LR
+    A[Landing Page] --> B{Is Authenticated?}
+    B -- No --> C[Public Services / About]
+    C --> D[Login / Register]
+    D --> B
+    B -- Yes --> E{Check Role}
+    
+    E -- SUPER_ADMIN --> F[Admin Dashboard]
+    E -- OFFICER --> G[Officer Dashboard]
+    E -- PROVIDER --> H[Provider Dashboard]
+    E -- CITIZEN --> I[Citizen Dashboard]
+    
+    F --> J[Manage Users/System]
+    G --> K[Process Complaints/Apps]
+    H --> L[Manage Services]
+    I --> M[Apply/Report/Chat]
+```
+
+### 5. User Journey End-to-End View
+A typical End-to-End (E2E) journey showing how a rural Citizen requests a government service and how it is processed by a Provider.
+
+```mermaid
+sequenceDiagram
+    actor Citizen
+    participant App as Frontend (React)
+    participant API as Backend (Express)
+    participant DB as Database
+    actor Provider as Gov Provider
+
+    Citizen->>App: Browse Services
+    App->>API: GET /services
+    API->>DB: Fetch Active Services
+    DB-->>App: Display Services
+    Citizen->>App: Submit Application (NID Correction)
+    App->>API: POST /applications
+    API->>DB: Save Application (Status: PENDING)
+    API-->>Provider: Socket.io Event (New Application)
+    Provider->>App: View Dashboard
+    App->>API: GET /applications/provider
+    Provider->>App: Click 'Approve'
+    App->>API: PUT /applications/:id/approve
+    API->>DB: Update Status to APPROVED
+    API-->>Citizen: Socket.io Event + DB Notification
+    Citizen->>App: View Application Status (Success!)
+```
+
+### 6. Visual Identity & Direction
+To ensure PolliBondhu is accessible and friendly to rural demographics, the Visual Identity was carefully crafted:
+- **Primary Colors:** Forest Green (`#16a34a`) representing agriculture and nature, paired with warm earthy tones.
+- **Typography:** *Inter* for clean, modern readability across all screen sizes and local languages (Bengali).
+- **UI Paradigm:** **Glassmorphism & Clean Cards**. We avoided cluttered interfaces, opting for large, touch-friendly buttons, clear iconography, and soft shadows to guide the user's eye naturally.
+- **Accessibility:** High contrast ratios for outdoor visibility (farmers using phones in sunlight), with responsive design for low-end mobile devices.
 
 ---
 
