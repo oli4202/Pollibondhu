@@ -602,6 +602,38 @@ flowchart TD
     style Repo fill:#bbf,stroke:#333,stroke-width:2px
 ```
 
+### Unit Isolation & Mocking Strategy
+
+A critical requirement of our testing philosophy is **isolating the unit of work** from all external dependencies (like databases, third-party APIs, and file systems). 
+
+- **Why isolate?** If a `UserService` test connects to a real database, it becomes an integration test. It becomes slow, flaky, and dependent on network state.
+- **How we do it:** We use `jest.spyOn()` and `prisma-mock` to intercept calls leaving the component being tested. We return *stubbed* (fake) data instead of actually executing the query.
+
+#### Visualization of Component Isolation
+
+This sequence diagram illustrates exactly how we test a Service class in complete isolation from the Controller and Database layers.
+
+```mermaid
+sequenceDiagram
+    participant TestRunner as Jest Test Suite
+    participant MockDB as PrismaMock (Stub)
+    participant Service as UserService (Unit of Work)
+    
+    Note over TestRunner,Service: 1. Setup Phase (Mocking)
+    TestRunner->>MockDB: Mock prisma.user.findUnique()
+    MockDB-->>TestRunner: Return Mocked User Data
+    
+    Note over TestRunner,Service: 2. Execution Phase (Isolated)
+    TestRunner->>Service: call getUserProfile(userId)
+    Service->>MockDB: query database (Intercepted!)
+    MockDB-->>Service: immediately return Mocked Data
+    
+    Note over TestRunner,Service: 3. Assertion Phase
+    Service-->>TestRunner: return processed result
+    TestRunner->>TestRunner: expect(result).toEqual(Mocked Data)
+    TestRunner->>TestRunner: expect(MockDB).toHaveBeenCalledTimes(1)
+```
+
 ### Test Organization
 
 Our tests are highly organized to map 1-to-1 with the `src` directory, ensuring every piece of business logic has an accompanying test suite.
