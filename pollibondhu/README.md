@@ -27,6 +27,25 @@ Rural areas often suffer from disconnected services and lack of access to real-t
 
 ---
 
+## 🎯 Core Features Highlight
+- 🌾 **Smart Agriculture Hub:** Real-time crop advice, weather alerts, and direct connection to agricultural officers.
+- 🏛️ **E-Governance Platform:** Apply for NID, Birth Certificates, and Trade Licenses digitally with real-time status tracking.
+- 📢 **Civic Grievance Redressal:** Citizens can file geo-tagged complaints directly to relevant government departments.
+- 💬 **Real-Time Community & Chat:** Built-in Socket.io chat system for instant communication with officers and providers.
+- 🤝 **NGO & Service Marketplace:** A dedicated portal for private providers to rent tractors or NGOs to manage relief programs.
+- 🤖 **AI Assistant Integration:** An automated chat helper to guide rural users through complex application processes.
+
+---
+
+## 🛡️ Security & Authentication
+Security is a top priority, especially when handling government applications.
+- **JWT (JSON Web Tokens):** Secure stateless authentication utilizing short-lived access tokens and HttpOnly refresh tokens.
+- **Bcrypt Hashing:** All user passwords are salted and hashed using bcrypt before hitting the database.
+- **Strict RBAC Middleware:** Every single API endpoint is protected by a custom `requirePermission` middleware that explicitly checks database-level permissions before execution.
+- **Helmet & CORS:** HTTP headers are secured against XSS and clickjacking using Helmet.js.
+
+---
+
 ## 📋 Table of Contents
 
 - [System Architecture & Diagrams](#️-system-architecture--diagrams)
