@@ -9,7 +9,7 @@
 <br/>
 
 <div align="center">
-  <img src="./assets/banner.png" alt="PolliBondhu Banner" width="800" />
+  <img src="https://placehold.co/800x200/16a34a/FFF?text=PolliBondhu+-+Smart+Village+Platform&font=Montserrat" alt="PolliBondhu Banner" width="800" />
 </div>
 
 # 🌾 PolliBondhu — Smart Village Platform
@@ -241,7 +241,7 @@ Five structural and behavioral design patterns were meticulously implemented to 
 - **Why this pattern was chosen:** It is the industry standard for managing stateful, resource-heavy shared connections (like a database or logger) across an entire application without passing the dependency down explicitly to every function.
 - **File & Class:** `backend/src/patterns/singleton/DatabaseManager.ts` | Class: `DatabaseManager`
 - **UI Representation / Visualization:**  
-  ![Singleton Diagram Visualization](https://via.placeholder.com/600x200.png?text=Singleton+Ensures+Smooth+UI+Data+Loading+Without+Database+Crashes)  
+  ![Singleton Diagram Visualization](https://placehold.co/600x150/1e293b/fff?text=Singleton:+Database+Connection+Healthy&font=Montserrat)  
   *In the UI, this manifests as stable and fast data loading on the Dashboard and Services pages, as the database connection pool remains healthy.*
 
 **Creation Flow Diagram:**
@@ -303,7 +303,7 @@ class DatabaseManager {
 - **Why this pattern was chosen:** It centralizes the instantiation logic for notifications, making the system highly extensible. Adding a new notification type only requires adding a new class and a single line in the Factory.
 - **File & Class:** `backend/src/patterns/factory/NotificationFactory.ts` | Interface: `NotificationProcessor`
 - **UI Representation / Visualization:**  
-  ![Factory Pattern UI](https://via.placeholder.com/600x200.png?text=Notification+Bell+%26+Dropdown+in+Navbar)  
+  ![Factory Pattern UI](https://placehold.co/600x150/1e293b/fff?text=Factory:+Notification+Bell+Dropdown&font=Montserrat)  
   *In the UI, this pattern directly powers the real-time Notification Bell dropdown in the navigation bar, processing and rendering alerts dynamically based on their type.*
 
 **Creation Flow Diagram:**
@@ -366,7 +366,7 @@ export class NotificationFactory {
 - **Why this pattern was chosen:** It allows the global search bar in the UI to dynamically switch query behaviors at runtime based on the user's selected category dropdown, strictly separating the concerns of *how* a search is performed from the controller.
 - **File & Class:** `backend/src/patterns/strategy/SearchStrategy.ts` | Interface: `SearchStrategy`
 - **UI Representation / Visualization:**  
-  ![Strategy Pattern UI](https://via.placeholder.com/600x200.png?text=Global+Search+Bar+with+Dynamic+Filters)  
+  ![Strategy Pattern UI](https://placehold.co/600x150/1e293b/fff?text=Strategy:+Global+Search+Bar+Filters&font=Montserrat)  
   *In the UI, this is utilized by the unified Search Bar where a user can select "Services", "Crops", or "Experts" from a dropdown to alter search behavior.*
 
 **Creation Flow Diagram:**
@@ -434,7 +434,7 @@ export class SearchContext {
 - **Why this pattern was chosen:** It provides extreme loose coupling. We can add new reactions to an event (e.g., sending an SMS) simply by attaching a new observer, without touching the core Complaint logic.
 - **File & Class:** `backend/src/patterns/observer/NotificationSubject.ts` | Interface: `Subject`
 - **UI Representation / Visualization:**  
-  ![Observer Pattern UI](https://via.placeholder.com/600x200.png?text=Audit+Logs+Dashboard+%26+Real-time+Toasts)  
+  ![Observer Pattern UI](https://placehold.co/600x150/1e293b/fff?text=Observer:+Real-Time+Audit+Logs&font=Montserrat)  
   *In the UI, this translates to the Admin Audit Logs updating instantly in the background, and Officer dashboards receiving real-time Socket.io toast notifications.*
 
 **Creation Flow Diagram:**
@@ -505,7 +505,7 @@ export class NotificationManager implements Subject {
 - **Why this pattern was chosen:** It drastically simplifies the Controller layer, strictly enforcing the separation of concerns. The Controller remains thin, while the Facade handles the complex subsystem aggregation.
 - **File & Class:** `backend/src/patterns/facade/AdminDashboardFacade.ts` | Class: `AdminDashboardFacade`
 - **UI Representation / Visualization:**  
-  ![Facade Pattern UI](https://via.placeholder.com/600x200.png?text=Admin+Dashboard+Analytics+Cards)  
+  ![Facade Pattern UI](https://placehold.co/600x150/1e293b/fff?text=Facade:+Admin+Dashboard+Cards&font=Montserrat)  
   *In the UI, this powers the 4+ statistic cards at the top of the Admin Dashboard (Total Users, Pending Apps, etc.) loading them simultaneously via one API call.*
 
 **Creation Flow Diagram:**
