@@ -638,14 +638,78 @@ npm run dev
 
 ---
 
-## 📡 Real-Time Features (Socket.io)
+## 📡 Real-Time Features (WebSocket & Socket.io)
 
-| Event | Direction | Description |
-|-------|-----------|-------------|
-| `chat:message` | Client ↔ Server | Send/Receive chat messages |
-| `chat:read` | Client ↔ Server | Read receipt notifications |
-| `join_user` | Client → Server | Join personal notification room |
-| `join_department` | Client → Server | Join department chat room |
+PolliBondhu utilizes **Socket.io** to provide instantaneous, real-time bidirectional communication between the server and clients. This architecture bypasses traditional HTTP polling, drastically reducing server load and ensuring citizens and officers receive immediate updates.
+
+### WebSocket Architecture & Connection Flow
+
+The real-time server sits alongside the Express REST API, sharing the same HTTP server but upgrading connections to WebSockets when a client connects.
+
+```mermaid
+graph TD
+    subgraph Client [Frontend App]
+        UI[React UI Components]
+        SC[Socket Context Provider]
+        UI <--> SC
+    end
+    
+    subgraph Network
+        WS((WebSocket / WSS))
+    end
+    
+    subgraph Server [Backend Node.js]
+        Http[HTTP Server]
+        SIO[Socket.io Server]
+        Auth[Socket Auth Middleware]
+        Rooms[(Socket Rooms)]
+        
+        Http --- SIO
+        SIO --> Auth
+        Auth --> Rooms
+    end
+
+    SC <-->|1. Handshake & Upgrade| WS
+    WS <-->|2. TCP Persistent Connection| Http
+```
+
+### Real-Time Event Event-Driven Data Flow
+
+This Sequence Diagram illustrates the lifecycle of a real-time event. For example, when an Officer approves an application, the citizen is notified instantly without needing to refresh the page.
+
+```mermaid
+sequenceDiagram
+    participant Officer as Officer (Client)
+    participant REST as Express API
+    participant DB as Prisma Database
+    participant SIO as Socket.io Server
+    participant Citizen as Citizen (Client)
+
+    Note over Citizen,SIO: 1. Citizen connects & joins room 'user:123'
+    Citizen->>SIO: emit('join_user', 123)
+    
+    Note over Officer: 2. Officer approves application
+    Officer->>REST: PUT /applications/88/approve
+    
+    REST->>DB: update application status
+    DB-->>REST: return updated application
+    
+    Note over REST,SIO: 3. REST triggers Socket Server internally
+    REST->>SIO: io.to('user:123').emit('notification', data)
+    
+    SIO->>Citizen: push WebSocket event
+    Note over Citizen: 4. Notification Bell rings instantly!
+```
+
+### Core Socket Events Catalog
+
+| Event Name | Direction | Payload Description | Room / Scope |
+|------------|-----------|---------------------|--------------|
+| `join_user` | Client → Server | `{ userId: number }` | Personal User Room |
+| `join_department` | Client → Server | `{ departmentId: number }` | Department Room |
+| `chat:message` | Client ↔ Server | Message content, sender, timestamp | Chat Room |
+| `chat:typing` | Client → Server | `{ isTyping: boolean }` | Chat Room |
+| `notification` | Server → Client | Title, message, priority | Personal User Room |
 
 ---
 
