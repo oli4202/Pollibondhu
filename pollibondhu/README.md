@@ -260,6 +260,18 @@ sequenceDiagram
     App->>DB: getPrisma().user.findMany()
 ```
 
+**UML Class Diagram:**
+```mermaid
+classDiagram
+    class DatabaseManager {
+        -static instance: DatabaseManager
+        -prisma: PrismaClient
+        -constructor()
+        +static getInstance() DatabaseManager
+        +getPrisma() PrismaClient
+    }
+```
+
 **How it works:**
 When any service (e.g., `UserService`) needs to query the database, it calls `DatabaseManager.getInstance()`. The manager checks if a `PrismaClient` instance already exists. If yes, it returns it; if no, it instantiates one, stores it statically, and returns it.
 
@@ -307,6 +319,27 @@ sequenceDiagram
     Processor-->>Client: Notification Sent & Saved
 ```
 
+**UML Class Diagram:**
+```mermaid
+classDiagram
+    class NotificationProcessor {
+        <<interface>>
+        +process(userId, title, message) Promise~void~
+    }
+    class InAppNotification {
+        +process(...) Promise~void~
+    }
+    class EmailNotification {
+        +process(...) Promise~void~
+    }
+    class NotificationFactory {
+        +static createProcessor(type: string) NotificationProcessor
+    }
+    NotificationFactory ..> NotificationProcessor : creates
+    NotificationProcessor <|.. InAppNotification : implements
+    NotificationProcessor <|.. EmailNotification : implements
+```
+
 **How it works:**
 The `NotificationFactory` evaluates the requested type. Based on the type, it instantiates the corresponding concrete processor (e.g., `InAppNotification`) which implements the common `NotificationProcessor` interface, ensuring a uniform `process()` method can be called safely by the client.
 
@@ -351,6 +384,29 @@ sequenceDiagram
     Context-->>Controller: Return Results to UI
 ```
 
+**UML Class Diagram:**
+```mermaid
+classDiagram
+    class SearchStrategy {
+        <<interface>>
+        +search(query: string, filters: any) Promise~any[]~
+    }
+    class ServiceSearchStrategy {
+        +search(query, filters) Promise~any[]~
+    }
+    class CropSearchStrategy {
+        +search(query, filters) Promise~any[]~
+    }
+    class SearchContext {
+        -strategy: SearchStrategy
+        +setStrategy(strategy: SearchStrategy)
+        +executeSearch(query: string, filters: any) Promise~any[]~
+    }
+    SearchContext o--> SearchStrategy : uses
+    SearchStrategy <|.. ServiceSearchStrategy : implements
+    SearchStrategy <|.. CropSearchStrategy : implements
+```
+
 **How it works:**
 The controller initializes a `SearchContext`. Depending on the query parameter (e.g., `type=service`), it injects the `ServiceSearchStrategy`. It then calls `executeSearch()`. The context delegates the complex Prisma querying logic entirely to the injected strategy.
 
@@ -393,6 +449,31 @@ sequenceDiagram
     Note over Subject: Event Occurs (e.g. Complaint Created)
     Subject->>Obs1: update(eventData)
     Subject->>Obs2: update(eventData)
+```
+
+**UML Class Diagram:**
+```mermaid
+classDiagram
+    class Subject {
+        <<interface>>
+        +attach(observer: Observer)
+        +notify(eventData: any)
+    }
+    class Observer {
+        <<interface>>
+        +update(eventData: any)
+    }
+    class NotificationManager {
+        -observers: Observer[]
+        +attach(observer: Observer)
+        +notify(eventData: any)
+    }
+    class AuditLogObserver {
+        +update(eventData: any)
+    }
+    Subject <|.. NotificationManager : implements
+    Observer <|.. AuditLogObserver : implements
+    NotificationManager o--> Observer : maintains list of
 ```
 
 **How it works:**
@@ -441,6 +522,24 @@ sequenceDiagram
     Facade->>Repos: count Services
     Repos-->>Facade: Return counts
     Facade-->>Controller: Return formatted Statistics Object
+```
+
+**UML Class Diagram:**
+```mermaid
+classDiagram
+    class AdminDashboardFacade {
+        +getDashboardStats() Promise~DashboardStats~
+    }
+    class UserRepository {
+        <<Prisma Database>>
+        +count()
+    }
+    class ApplicationRepository {
+        <<Prisma Database>>
+        +count()
+    }
+    AdminDashboardFacade --> UserRepository : delegates to
+    AdminDashboardFacade --> ApplicationRepository : delegates to
 ```
 
 **How it works:**
