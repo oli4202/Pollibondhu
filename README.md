@@ -743,6 +743,35 @@ pollibondhu/
 
 ---
 
+## 🔐 Demo Credentials
+
+> 💡 **Tip:** Use these accounts to explore every role. The UI, navigation, and available actions adapt completely based on your role and permissions.
+
+### 👑 Admin Accounts
+
+| | Role | Name | 📧 Email | 🔑 Password | 🗝️ Access Level |
+|:---:|:---|:---|:---|:---|:---|
+| 👑 | **Super Admin** | Super Administrator | `superadmin@pollibondhu.test` | `admin123` | Full platform control — all modules, RBAC, audit logs, analytics |
+| 🛡️ | **System Admin** | System Administrator | `admin@pollibondhu.test` | `admin123` | User management, complaint resolution, service approval, budget |
+| 🏛️ | **Govt. Officer** | Agriculture Officer Karim | `officer@pollibondhu.test` | `officer123` | Department projects, complaint assignment, field reports |
+
+### 🏪 Service Provider Account
+
+| | Role | Name | 📧 Email | 🔑 Password | 📝 Description |
+|:---:|:---|:---|:---|:---|:---|
+| 🌿 | **Service Provider** | Karim Agro Services | `provider@pollibondhu.test` | `provider123` | Manage agricultural services, view bookings, respond to complaints, run provider channels |
+
+### 🌾 Citizen / User Accounts
+
+| | Name | 📧 Email | 🔑 Password | 📍 Location | 🌟 Profile |
+|:---:|:---|:---|:---|:---|:---|
+| 👨‍🌾 | **Rahim Uddin** | `rahim@pollibondhu.test` | `user123` | Dinajpur, Rangpur | Smallholder rice farmer — primary demo citizen |
+| 👩‍💼 | **Sultana Begum** | `sultana@pollibondhu.test` | `user123` | Jhalokati, Barisal | Rural entrepreneur, NGO programme participant |
+| 👨‍🔬 | **Abdur Rahman** | `abdur@pollibondhu.test` | `user123` | Cox's Bazar, Chittagong | Fisherman, marketplace seller |
+| 👩‍⚕️ | **Fatema Khatun** | `fatema@pollibondhu.test` | `user123` | Khulna | Healthcare service applicant |
+
+---
+
 ## 👥 Roles & Responsibilities
 
 ### Role Hierarchy
@@ -791,6 +820,236 @@ SUPER_ADMIN (1) — Full system access
 1. **Database-driven**: Roles and permissions are stored in the database.
 2. **Middleware checks**: API endpoints use `requirePermission()` or `requireAnyPermission()` middleware.
 3. **ADMIN bypass**: The SUPER_ADMIN role automatically bypasses all permission checks.
+
+---
+
+## 📋 Software Requirements Specification (SRS) — System Workflow
+
+The following diagram shows the end-to-end system workflow from user entry to core transaction completion.
+
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║                  POLLIBONDHU — SYSTEM WORKFLOW                       ║
+╠══════════════════════════════════════════════════════════════════════╣
+║                                                                      ║
+║  [1] ENTRY POINT                                                     ║
+║   Landing Page ─────────────► Public browse (no auth required)      ║
+║       │                                                              ║
+║       ├──► Register / Login ──► JWT Auth → Role Assignment          ║
+║                                      │                               ║
+║                            ┌─────────┴──────────┐                  ║
+║                            ▼                    ▼                   ║
+║                      Access Token          Refresh Token            ║
+║                      (15 min TTL)          (7 day TTL)              ║
+║                                                                      ║
+║  [2] ROLE ROUTING (RBAC Guard)                                       ║
+║       │                                                              ║
+║       ├─► CITIZEN ──────────► Dashboard → Applications, Complaints  ║
+║       │                        Market, Forum, Chat, Certificates    ║
+║       ├─► PROVIDER ─────────► Provider Dashboard → Services,        ║
+║       │                        Bookings, Channels, Analytics        ║
+║       ├─► OFFICER ──────────► Dept. Projects, Complaint Assign,     ║
+║       │                        Field Reports, Budget View           ║
+║       └─► ADMIN ────────────► Full Platform Control:                ║
+║                                 User Mgmt, Service Approval,        ║
+║                                 Analytics, Audit Logs, Budget       ║
+╠══════════════════════════════════════════════════════════════════════╣
+║  [3] CORE TRANSACTION FLOWS                                          ║
+╠══════════════════════════════════════════════════════════════════════╣
+║                                                                      ║
+║  APPLICATION FLOW:                                                   ║
+║  Citizen ──► Submit Form + Docs ──► Status: SUBMITTED               ║
+║           ──► Admin Reviews ──────► Status: UNDER_REVIEW            ║
+║           ──► Assign to Dept ─────► Status: IN_PROGRESS             ║
+║           ──► Officer Resolves ───► Status: RESOLVED                ║
+║           ──► Citizen Rates ──────► Status: CLOSED                  ║
+║                                                                      ║
+║  COMPLAINT FLOW:                                                     ║
+║  Citizen ──► File ──► PENDING ──► Admin Review ──► REVIEW           ║
+║           ──► Assign Officer ──► IN_PROGRESS ──► Resolution Notes   ║
+║           ──► RESOLVED ──► Citizen Feedback ──► CLOSED              ║
+║                                                                      ║
+║  SERVICE LISTING FLOW:                                               ║
+║  Provider ──► Create Service ──► PENDING (admin review)             ║
+║           ──► Admin Approves ──► ACTIVE ──► Citizen Applies         ║
+║                                                                      ║
+║  NOTIFICATION FLOW (Observer Pattern):                               ║
+║  Any System Event                                                    ║
+║    ──► NotificationSubject.notify()                                 ║
+║         ├──► InAppNotificationObserver ──► DB + WebSocket           ║
+║         ├──► EmailNotificationObserver ──► Email Queue              ║
+║         └──► AuditLogObserver ──────────► Audit Trail               ║
+║                                                                      ║
+╚══════════════════════════════════════════════════════════════════════╝
+```
+
+### Functional Requirements Summary
+
+| FR# | Requirement | Priority | Status |
+|:----|:---|:---:|:---:|
+| FR-01 | Multi-role JWT authentication (register, login, refresh, logout) | 🔴 High | ✅ Done |
+| FR-02 | Role-Based Access Control (RBAC) with route guards | 🔴 High | ✅ Done |
+| FR-03 | Citizens submit & track applications with document uploads | 🔴 High | ✅ Done |
+| FR-04 | Multi-stage complaint filing with SLA enforcement | 🔴 High | ✅ Done |
+| FR-05 | Service providers list, edit and manage services | 🔴 High | ✅ Done |
+| FR-06 | Admins approve/reject services and manage users | 🔴 High | ✅ Done |
+| FR-07 | Village marketplace with buy/sell/rent listings | 🟡 Medium | ✅ Done |
+| FR-08 | Real-time messaging & provider channels | 🟡 Medium | ✅ Done |
+| FR-09 | AI-powered crop suggestion & service finder (Groq AI) | 🟡 Medium | ✅ Done |
+| FR-10 | Admin analytics dashboard with Recharts visualisations | 🟡 Medium | ✅ Done |
+| FR-11 | Department & project management with budget tracking | 🟡 Medium | ✅ Done |
+| FR-14 | SMS/Push notification gateway | 🟢 Low | 🔮 Roadmap |
+
+---
+
+## 🗺️ UX Standardisation & Visual Design System
+
+### Design Philosophy
+
+> **"Digital Inclusion First"** — The interface must be usable by rural Bangladeshis with varying literacy levels and low-bandwidth connections, while remaining modern and professional for administrators.
+
+Three core principles guide every design decision:
+1. **Clarity over cleverness** — every action is obvious without instruction
+2. **Status always visible** — every tracked item shows its current state prominently  
+3. **Role-aware navigation** — the interface adapts completely to the logged-in role
+
+### Color System
+
+```
+PRIMARY PALETTE
+──────────────────────────────────────────────────────
+  Green-600   #16a34a  ── Primary CTA, success, brand identity
+  Green-100   #dcfce7  ── Light tag backgrounds, success fills
+  Amber-500   #f59e0b  ── Warning states, pending status badges
+  Red-500     #ef4444  ── Error states, destructive actions
+  Blue-500    #3b82f6  ── Informational, links, secondary CTAs
+
+NEUTRAL PALETTE
+──────────────────────────────────────────────────────
+  Gray-900    #111827  ── Primary body text
+  Gray-600    #4b5563  ── Secondary / muted text
+  Gray-200    #e5e7eb  ── Borders, dividers, hairlines
+  Gray-50     #f9fafb  ── Page background surface
+
+SEMANTIC STATUS COLORS
+──────────────────────────────────────────────────────
+  PENDING      → Amber-100 bg  + Amber-800 text
+  UNDER_REVIEW → Blue-100 bg   + Blue-800 text
+  IN_PROGRESS  → Blue-100 bg   + Blue-800 text
+  RESOLVED     → Green-100 bg  + Green-800 text
+  CLOSED       → Gray-100 bg   + Gray-800 text
+  REJECTED     → Red-100 bg    + Red-800 text
+  URGENT       → Red-500 bg    + White text
+```
+
+### Typography Scale
+
+```
+FONT FAMILY:  Inter (Latin) + Hind Siliguri (Bengali)
+──────────────────────────────────────────────────────
+  Display  48px / Bold 800      ── Hero landing headlines
+  H1       36px / Bold 700      ── Page-level titles
+  H2       24px / SemiBold 600  ── Section headings
+  H3       20px / SemiBold 600  ── Card titles, sub-sections
+  Body-LG  18px / Regular 400   ── Feature description text
+  Body     16px / Regular 400   ── Default paragraph text
+  Body-SM  14px / Regular 400   ── Form labels, metadata
+  Caption  12px / Medium 500    ── Badges, timestamps, helper text
+```
+
+### UX Sitemap & Navigation Architecture
+
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║              POLLIBONDHU — SITEMAP & NAVIGATION FLOW                 ║
+╠══════════════════════════════════════════════════════════════════════╣
+║                                                                      ║
+║  PUBLIC ZONE (No Auth)                                               ║
+║  /              Home (Landing)                                       ║
+║  /agriculture   Crop Catalog + Market Prices + Weather               ║
+║  /services      Local Service Provider Directory                     ║
+║  /healthcare    Healthcare Facilities Directory                      ║
+║  /education     Education & Scholarship Resources                    ║
+║  /ngos          NGO Programme Directory                              ║
+║  /market        Village Marketplace (Browse)                         ║
+║  /community     Forums & Community News                              ║
+║  /emergency     Emergency Contacts Directory                         ║
+║  /login         Authentication                                       ║
+║  /register      New Account Registration                             ║
+║                          │                                           ║
+║                   [JWT Authentication]                               ║
+║                          │                                           ║
+║    ┌─────────────────────┼──────────────────────┐                  ║
+║    ▼                     ▼                      ▼                   ║
+║                                                                      ║
+║  CITIZEN PORTAL       PROVIDER PORTAL       ADMIN PORTAL            ║
+║  /user/dashboard      /provider/dashboard   /admin/dashboard        ║
+║  /user/applications   /provider/services    /admin/users            ║
+║  /user/complaints     /provider/bookings    /admin/complaints       ║
+║  /user/messages       /provider/channels    /admin/services         ║
+║  /user/market         /provider/analytics   /admin/projects         ║
+║  /user/profile        /provider/profile     /admin/budget           ║
+║                                             /admin/audit-logs       ║
+║                                             /admin/departments      ║
+║                                                                      ║
+╚══════════════════════════════════════════════════════════════════════╝
+```
+
+### UI Component Patterns
+
+```
+CARD COMPONENT
+──────────────────────────────────────────────────────────
+  ┌──────────────────────────────────────────┐
+  │  [● ACTIVE]                [📍 Sylhet]   │  ← Status + Location pills
+  │  📷 Service Image / Icon                 │
+  │  H3 Card Title (20px SemiBold)           │
+  │  Body description (14px Gray-600)        │
+  │  ─────────────────────────────────────── │
+  │  📅 Aug 2026         💰 ৳ 1,200/day      │  ← Meta row
+  │  [ ───────── View Details → ─────────── ]│  ← Primary CTA button
+  └──────────────────────────────────────────┘
+
+FORM FIELD
+──────────────────────────────────────────────────────────
+  Full Name *                    ← Label (14px SemiBold)
+  ┌─────────────────────────────┐
+  │  Rahim Uddin                │  ← focus:ring-2 ring-green-500
+  └─────────────────────────────┘
+  Enter your full legal name     ← Helper (12px Gray-500)
+  ⚠ This field is required       ← Zod error (Red-600)
+
+STATUS BADGE REFERENCE
+──────────────────────────────────────────────────────────
+  [PENDING]       Amber-100 bg  / Amber-800 text / rounded-full
+  [UNDER REVIEW]  Blue-100 bg   / Blue-800 text  / rounded-full
+  [IN PROGRESS]   Blue-100 bg   / Blue-800 text  / rounded-full
+  [RESOLVED]      Green-100 bg  / Green-800 text / rounded-full
+  [CLOSED]        Gray-100 bg   / Gray-800 text  / rounded-full
+  [REJECTED]      Red-100 bg    / Red-800 text   / rounded-full
+  [URGENT]        Red-500 bg    / White text     / rounded-full
+```
+
+### Responsive Breakpoints
+
+| Breakpoint | Range | Layout | Navigation |
+|:---|:---|:---|:---|
+| **Mobile** | < 640px | Single column | Bottom nav bar (5 items) |
+| **Tablet** | 640–1024px | 2-column grid | Collapsible sidebar (overlay) |
+| **Desktop** | 1024–1280px | 3–4 column grid | Fixed left sidebar (240px) |
+| **Wide** | > 1280px | Max-width 1280px centered | Fixed left sidebar (240px) |
+
+### Accessibility Standards (WCAG 2.1 AA)
+
+| Standard | Implementation |
+|:---|:---|
+| **Color Contrast** | All text meets minimum 4.5:1 ratio |
+| **Focus Indicators** | `focus:ring-2 ring-green-500 ring-offset-2` on all interactive elements |
+| **ARIA Labels** | All icon-only buttons have descriptive `aria-label` attributes |
+| **Keyboard Navigation** | Full tab order on all forms, modals, and dropdowns |
+| **Semantic HTML** | `<main>`, `<nav>`, `<section>`, `<article>`, `<aside>` used throughout |
+| **Reduced Motion** | `prefers-reduced-motion` respected for all animations |
+| **Text Scaling** | Layout remains usable at 200% browser zoom |
 
 ---
 
